@@ -44,7 +44,7 @@ jobs:
 
       - name: Inspect SDK layout
         env:
-          DEVECO_SDK_HOME: $HOS_SDK_HOME
+          DEVECO_SDK_HOME: ${{ env.HOS_SDK_HOME }}
         run: |
           echo "HOS_SDK_HOME=$HOS_SDK_HOME"
           echo "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
@@ -54,7 +54,7 @@ jobs:
 
       - name: Build HAP
         env:
-          DEVECO_SDK_HOME: $HOS_SDK_HOME
+          DEVECO_SDK_HOME: ${{ env.HOS_SDK_HOME }}
         run: |
           node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
 
