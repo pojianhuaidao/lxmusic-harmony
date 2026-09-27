@@ -177,7 +177,7 @@ export class SeedBuiltin {
     return decoder.decodeToString(context.resourceManager.getRawFileContentSync(`${ASSET_DIR}/${file}`));
   }
 
-  private scriptHashOf(engine: SourceEngine, id: string): string {
+  private scriptHashOf(engine: SeedEngine, id: string): string {
     try {
       if (!engine.hasScript(id)) {
         return '';
