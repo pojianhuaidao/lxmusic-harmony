@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -22,11 +27,12 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup HarmonyOS SDK
+      - name: Setup HarmonyOS SDK (API 23 / 26.0.0)
         id: setup
-        uses: harmonyos-dev/setup-harmonyos-sdk@0.2.1
-        env:
-          JAVA_TOOL_OPTIONS: -Duser.country=CN
+        uses: ErBWs/setup-ohos@v2
+        with:
+          version: 26.0.0.821
+          cache: true
 
       - name: Prepare build-profile.json5
         run: cp build-profile.template.json5 build-profile.json5
@@ -38,15 +44,17 @@ jobs:
 
       - name: Inspect SDK layout
         env:
-          DEVECO_SDK_HOME: ${{ steps.setup.outputs.sdk-path }}
+          DEVECO_SDK_HOME: $HOS_SDK_HOME
         run: |
+          echo "HOS_SDK_HOME=$HOS_SDK_HOME"
           echo "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
           ls -la "$DEVECO_SDK_HOME"
-          find "$DEVECO_SDK_HOME" -maxdepth 3 -type d | head -40
+          cat "$DEVECO_SDK_HOME/default/sdk-pkg.json" 2>/dev/null | head -20
+          find "$DEVECO_SDK_HOME" -maxdepth 2 -type d | head -40
 
       - name: Build HAP
         env:
-          DEVECO_SDK_HOME: ${{ steps.setup.outputs.sdk-path }}
+          DEVECO_SDK_HOME: $HOS_SDK_HOME
         run: |
           node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
 
