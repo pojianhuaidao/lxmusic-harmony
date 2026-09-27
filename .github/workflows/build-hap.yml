@@ -38,15 +38,15 @@ jobs:
 
       - name: Inspect SDK layout
         env:
-          HOS_SDK_HOME: ${{ steps.setup.outputs.sdk-path }}
+          DEVECO_SDK_HOME: ${{ steps.setup.outputs.sdk-path }}
         run: |
-          echo "HOS_SDK_HOME=$HOS_SDK_HOME"
-          ls -la "$HOS_SDK_HOME"
-          find "$HOS_SDK_HOME" -maxdepth 3 -type d | head -40
+          echo "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
+          ls -la "$DEVECO_SDK_HOME"
+          find "$DEVECO_SDK_HOME" -maxdepth 3 -type d | head -40
 
       - name: Build HAP
         env:
-          HOS_SDK_HOME: ${{ steps.setup.outputs.sdk-path }}
+          DEVECO_SDK_HOME: ${{ steps.setup.outputs.sdk-path }}
         run: |
           node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
 
