@@ -135,8 +135,8 @@ export class PlaySettings {
   private inited: boolean = false;
 
   // ---------------------------------------------------------------- 默认值
-  /** 播放音质：洛雪默认也是 128k */
-  private quality: string = '128k';
+  /** 播放音质：洛雪默认 128k；定制版默认 flac24bit（对应安卓版 defaultSetting player.playQuality） */
+  private quality: string = 'flac24bit';
   /**
    * 拓展音质默认关：这几档多数平台要会员，拿不到链接时表现为「点了不出声」，
    * 让用户自己开更合适（开了也能自动退回普通音质）。
