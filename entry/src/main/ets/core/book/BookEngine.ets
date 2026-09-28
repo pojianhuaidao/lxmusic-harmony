@@ -686,7 +686,39 @@ export class BookEngine {
 
   /** 从文件导入（选择器给的沙箱 URI） */
   importFromUri(uri: string): BookSourceInfo[] {
-    const text: string = fs.readTextSync(uri);
+    const text: string = readTextFromUri(uri);
     return this.importSources(text);
+  }
+}
+
+/**
+ * 读出用户选中的书源文件
+ *
+ * picker 给的是文件管理那边的 uri（如 file://docs/...），直接 fs.readTextSync 会报
+ * 「No such file or directory」——必须先 openSync 打开再 readSync 读，与音源导入的
+ * readScriptFile 同一套做法（见 SourceSettingsView.ets）；带 BOM 的文件摘掉头一个
+ * 不可见字符，避免污染书源 JSON 解析。
+ */
+function readTextFromUri(uri: string): string {
+  let file: fs.File | null = null;
+  try {
+    file = fs.openSync(uri, fs.OpenMode.READ_ONLY);
+    const size: number = fs.statSync(file.fd).size;
+    if (size <= 0) {
+      return '';
+    }
+    const buffer: ArrayBuffer = new ArrayBuffer(size);
+    const read: number = fs.readSync(file.fd, buffer);
+    const decoder = util.TextDecoder.create('utf-8');
+    const text: string = decoder.decodeToString(new Uint8Array(buffer, 0, read));
+    return text.charCodeAt(0) === 0xFEFF ? text.substring(1) : text;
+  } finally {
+    if (file !== null) {
+      try {
+        fs.closeSync(file);
+      } catch (e) {
+        // 关闭失败不影响导入结果
+      }
+    }
   }
 }

@@ -27,6 +27,8 @@ const TAG: string = 'SourceEngine';
 
 const PAGE_READY_TIMEOUT: number = 10000;
 const INIT_TIMEOUT: number = 10000;
+/** 等待源脚本注册 request 处理器的轮询上限：聚合型「独家音源」常在异步回调里才注册，固定延时易误杀 */
+const REGISTER_WAIT_TIMEOUT: number = 8000;
 /**
  * 等待源脚本解析出播放链接的上限。
  * 洛雪本身对 sendAction 不做超时（一直等），这里给一个足够宽松的上限：
@@ -549,20 +551,25 @@ export class SourceEngine {
     }
     // ArkWeb 的 runJavaScript 在脚本执行失败时返回 null（不是 reject），
     // 所以不能只看返回值，必须问沙箱「脚本跑到哪一步了」。
-    let state: SandboxDebugState = await this.readDebugState();
+    // 部分脚本（尤其「独家音源」这类聚合源）在异步回调里才注册 request 处理器，
+    // 固定等 150ms 就判定失败会误杀：改为轮询等待注册，超时再走 ArrayBuffer 重试。
+    let state: SandboxDebugState = await this.waitForHandler(REGISTER_WAIT_TIMEOUT);
     if (!state.hasHandler) {
       this.pushLog('warn', `源脚本未注册 request 处理器（${state.raw}），改用 ArrayBuffer 注入重试`);
       await this.callJs('if (typeof __lx_destroy__ === "function") { __lx_destroy__(); }');
       await this.injectEngine(info, script);
       await this.runJsBuffer(wrapped);
-      await this.delay(150);
-      state = await this.readDebugState();
+      state = await this.waitForHandler(REGISTER_WAIT_TIMEOUT);
       if (!state.hasHandler) {
         this.cancelInitWait();
         const scriptErr: string = this.lastScriptError.length > 0 ? `脚本抛出：${this.lastScriptError}。` : '';
+        const envHint: string = state.env === 'mobile'
+          ? '如脚本要求桌面环境，可到音源设置切换兼容模式后重新加载。' : '';
         throw new Error(
           `源脚本执行后仍未注册 request 处理器（脚本可能不是洛雪自定义源格式，或自身校验未通过）。` +
-          `${scriptErr}脚本长度 ${script.length}，沙箱状态 ${state.raw}`,
+          `${scriptErr}脚本长度 ${script.length}，已初始化 ${state.inited}，` +
+          `发送事件 ${state.sendCalls.length > 0 ? state.sendCalls.join('、') : '无'}，` +
+          `沙箱环境 ${state.env}。${envHint}沙箱状态 ${state.raw}`,
         );
       }
       this.pushLog('info', '改用 ArrayBuffer 注入后脚本成功注册 request 处理器');
@@ -632,6 +639,27 @@ export class SourceEngine {
     } catch (e) {
       return fallback;
     }
+  }
+
+  /**
+   * 轮询等待源脚本注册 request 处理器。
+   *
+   * 有些脚本（尤其「独家音源」这类聚合源）要先进程拉规则/做异步初始化，之后才执行
+   * lx.on('request')，固定延时后立即判失败会误杀；这里每 200ms 问一次沙箱，注册成功
+   * 即返回，超时返回最后一次状态（供上层拼错误信息）。脚本明确抛错时也提前返回，
+   * 避免在已知失败上白等。
+   */
+  private async waitForHandler(timeoutMs: number): Promise<SandboxDebugState> {
+    const deadline: number = Date.now() + timeoutMs;
+    let state: SandboxDebugState = await this.readDebugState();
+    while (!state.hasHandler && Date.now() < deadline) {
+      if (this.lastScriptError.length > 0) {
+        break;
+      }
+      await this.delay(200);
+      state = await this.readDebugState();
+    }
+    return state;
   }
 
   /** 注入引擎：bootstrap(元信息) -> 工具库 -> preload(lx API) */
