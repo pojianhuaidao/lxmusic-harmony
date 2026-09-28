@@ -400,7 +400,10 @@
       Object.defineProperty(global, gname, { value: undefined, writable: false, configurable: false })
     } catch (e) { /* ignore */ }
   }
-  try { global.eval = function () { throw new Error('eval is not available') } } catch (e) { /* ignore */ }
+  // 注意：不主动禁用 eval。洛雪 mobile 的 QuickJS 沙箱不禁用 eval；
+  // 部分混淆音源（如独家音源V6）初始化依赖 eval 解码，禁用会导致其
+  // 初始化静默失败、不注册 request handler，点播放提示"最后一次响应请求失败"。
+  // eval 为 ArkWeb 引擎原生提供，此处不再覆盖。
 
   // ------------------------------------------------------------------ lx 对象
   global.lx = {

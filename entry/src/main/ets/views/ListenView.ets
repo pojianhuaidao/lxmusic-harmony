@@ -134,6 +134,15 @@ export struct ListenView {
   @State exploreResults: BookHit[] = [];
   @State exploring: boolean = false;
   @State exploreStatus: string = '';
+  /** 发现页「推荐」入口地址（exploreUrl 解析，空串不显示） */
+  @State exploreHome: string = '';
+  /** 登录面板：目标书源 / 账号 / 密码 / 进行中 / 结果 */
+  @State loginSourceId: string = '';
+  @State loginOpen: boolean = false;
+  @State loginName: string = '';
+  @State loginPassword: string = '';
+  @State loginBusy: boolean = false;
+  @State loginStatus: string = '';
   /** 书源管理：导入状态 */
   @State busy: boolean = false;
   @State sourceStatus: string = '';
@@ -197,11 +206,22 @@ export struct ListenView {
     this.exploreCategories = this.exploreSourceId.length > 0
       ? BookEngine.getInstance().exploreCategories(this.exploreSourceId)
       : [];
+    this.exploreHome = this.exploreSourceId.length > 0
+      ? BookEngine.getInstance().exploreHomeUrl(this.exploreSourceId)
+      : '';
     this.exploreLoadedFor = this.exploreSourceId;
     this.exploreCategoryTitle = '';
     this.exploreCategoryUrl = '';
     this.exploreResults = [];
     this.exploreStatus = '';
+  }
+
+  /** 发现页「推荐」：直接拉 exploreUrl 根地址的书单 */
+  private async doExploreHome(): Promise<void> {
+    if (this.exploreSourceId.length === 0 || this.exploreHome.length === 0) {
+      return;
+    }
+    await this.doExplore({ title: '推荐', url: this.exploreHome });
   }
 
   private selectExploreSource(id: string): void {
@@ -351,6 +371,58 @@ export struct ListenView {
     }
     this.refresh();
     this.sourceStatus = '已删除该书源';
+  }
+
+  // ------------------------------------------------------------ 书源登录
+
+  /** 打开登录面板（书源分段「登录」或发现页横幅「去登录」） */
+  private openLoginFor(id: string): void {
+    this.loginSourceId = id;
+    this.loginName = '';
+    this.loginPassword = '';
+    this.loginStatus = '';
+    this.loginOpen = true;
+  }
+
+  private closeLogin(): void {
+    if (this.loginBusy) {
+      return;
+    }
+    this.loginOpen = false;
+    this.loginSourceId = '';
+  }
+
+  /** 执行登录：账号密码走 BookEngine.login（会话内），成功后刷新 */
+  private async doLogin(): Promise<void> {
+    if (this.loginBusy || this.loginSourceId.length === 0) {
+      return;
+    }
+    this.loginBusy = true;
+    this.loginStatus = '正在登录…';
+    try {
+      const msg: string = await BookEngine.getInstance().login(
+        this.loginSourceId, this.loginName, this.loginPassword);
+      this.loginStatus = msg;
+      if (msg === '登录成功') {
+        this.refresh();
+        // 发现页重新拉一次分类（登录态变了）
+        if (this.exploreSourceId === this.loginSourceId) {
+          this.loadExploreCategories();
+        }
+      }
+    } catch (e) {
+      this.loginStatus = `登录失败：${(e as Error).message}`;
+    } finally {
+      this.loginBusy = false;
+    }
+  }
+
+  /** 当前源登录情况文案（书源行 / 发现页横幅共用） */
+  private loginLabel(info: BookSourceInfo): string {
+    if (!info.needLogin) {
+      return '';
+    }
+    return BookEngine.getInstance().isLoggedIn(info.id) ? '已登录' : '未登录';
   }
 
   // ------------------------------------------------------------ 片段构建
@@ -630,6 +702,31 @@ export struct ListenView {
       .width('100%')
       .padding({ left: 16, right: 16, top: 4, bottom: 8 })
 
+      // 当前发现源需要登录且还没登录：横幅引导去登录
+      if (this.exploreSourceId.length > 0) {
+        const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.exploreSourceId);
+        if (info !== null && info.needLogin && !BookEngine.getInstance().isLoggedIn(this.exploreSourceId)) {
+          Row({ space: 10 }) {
+            Text('该书源需要登录')
+              .fontSize(F_SUB)
+              .fontColor(C_TEXT_SUB)
+              .layoutWeight(1)
+              .textAlign(TextAlign.Start)
+            Text('去登录')
+              .fontSize(13)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(C_RED)
+              .onClick(() => {
+                this.openLoginFor(this.exploreSourceId);
+              })
+              .accessibilityText('去登录')
+              .accessibilityLevel('yes')
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 2, bottom: 10 })
+        }
+      }
+
       if (this.explorableSources().length === 0) {
         EmptyState({
           icon: I_BOOK,
@@ -648,6 +745,30 @@ export struct ListenView {
           })
         } else {
           List() {
+            // 推荐书目：exploreUrl 根地址（裸 URL 或第一个分类），没解析出来就不显示
+            if (this.exploreHome.length > 0) {
+              ListItem() {
+                Row({ space: 12 }) {
+                  Text('推荐')
+                    .fontSize(F_ITEM)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(C_RED)
+                    .maxLines(1)
+                    .layoutWeight(1)
+                    .textAlign(TextAlign.Start)
+                  IconGlyph({ symbol: I_CHEVRON_RIGHT, iconSize: 18, color: C_TEXT_WEAK })
+                    .accessibilityLevel('no')
+                }
+                .width('100%')
+                .padding({ left: 16, right: 14, top: 14, bottom: 14 })
+                .onClick(() => {
+                  void this.doExploreHome();
+                })
+                .accessibilityGroup(true)
+                .accessibilityText('推荐书目')
+                .accessibilityLevel('yes')
+              }
+            }
             ForEach(this.exploreCategories, (cat: BookExploreCategory) => {
               ListItem() {
                 Row({ space: 12 }) {
@@ -866,6 +987,20 @@ export struct ListenView {
                 .layoutWeight(1)
                 .alignItems(HorizontalAlign.Start)
 
+                if (info.needLogin) {
+                  Text(BookEngine.getInstance().isLoggedIn(info.id) ? '已登录' : '登录')
+                    .fontSize(12.5)
+                    .fontColor(C_RED)
+                    .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+                    .backgroundColor($r('app.color.c_fill_soft_strong'))
+                    .borderRadius(14)
+                    .onClick(() => {
+                      this.openLoginFor(info.id);
+                    })
+                    .accessibilityText(`登录书源 ${info.name}`)
+                    .accessibilityLevel('yes')
+                }
+
                 IconGlyph({ symbol: I_TRASH, iconSize: 20, color: C_TEXT_WEAK })
                   .padding({ left: 6, right: 6, top: 6, bottom: 6 })
                   .onClick(() => {
@@ -904,43 +1039,156 @@ export struct ListenView {
     return `${info.group.length > 0 ? info.group + ' · ' : ''}${suffix} · ${info.url}`;
   }
 
-  build() {
+  /** 登录面板：全屏遮罩 + 居中卡片（账号 / 密码 / 执行） */
+  @Builder
+  loginSheet() {
     Column() {
-      Row() {
-        CapsuleSegment({
-          labels: ['书架', '搜索', '发现', '书源'],
-          selectedIndex: this.pane,
-          compact: false,
-          onSelect: (index: number) => {
-            this.pane = index;
-            if (index === PANE_SHELF || index === PANE_SOURCE) {
-              this.refresh();
-            } else if (index === PANE_EXPLORE) {
-              this.refresh();
-              this.ensureExploreSource();
-              if (this.exploreLoadedFor !== this.exploreSourceId) {
-                this.loadExploreCategories();
+      Column({ space: 18 }) {
+        const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.loginSourceId);
+        Column({ space: 4 }) {
+          Text('登录书源')
+            .fontSize(17)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(C_TEXT)
+          Text(info !== null ? info.name : this.loginSourceId)
+            .fontSize(F_SUB)
+            .fontColor(C_TEXT_SUB)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+        }
+        .width('100%')
+
+        TextInput({ text: this.loginName, placeholder: '账号' })
+          .placeholderColor(C_TEXT_WEAK)
+          .placeholderFont({ size: 15 })
+          .fontSize(15)
+          .height(46)
+          .width('100%')
+          .backgroundColor(C_BG)
+          .borderRadius(10)
+          .padding({ left: 14, right: 14 })
+          .onChange((value: string) => {
+            this.loginName = value;
+          })
+
+        TextInput({ text: this.loginPassword, placeholder: '密码' })
+          .type(InputType.Password)
+          .placeholderColor(C_TEXT_WEAK)
+          .placeholderFont({ size: 15 })
+          .fontSize(15)
+          .height(46)
+          .width('100%')
+          .backgroundColor(C_BG)
+          .borderRadius(10)
+          .padding({ left: 14, right: 14 })
+          .onChange((value: string) => {
+            this.loginPassword = value;
+          })
+          .onSubmit(() => {
+            void this.doLogin();
+          })
+
+        if (this.loginStatus.length > 0) {
+          Text(this.loginStatus)
+            .fontSize(F_SUB)
+            .fontColor(C_TEXT_SUB)
+            .width('100%')
+            .textAlign(TextAlign.Center)
+        }
+
+        Row({ space: 12 }) {
+          Button('取消')
+            .fontSize(15)
+            .height(40)
+            .layoutWeight(1)
+            .enabled(!this.loginBusy)
+            .backgroundColor(C_DIVIDER)
+            .fontColor(C_TEXT)
+            .onClick(() => {
+              this.closeLogin();
+            })
+          Button(this.loginBusy ? '登录中…' : '登录')
+            .fontSize(15)
+            .height(40)
+            .layoutWeight(1)
+            .enabled(!this.loginBusy)
+            .onClick(() => {
+              void this.doLogin();
+            })
+        }
+        .width('100%')
+
+        Text('登录态保存在本次会话：重启后需要重新登录。')
+          .fontSize(11.5)
+          .fontColor(C_TEXT_WEAK)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+      }
+      .width('86%')
+      .padding(20)
+      .backgroundColor(C_CARD)
+      .borderRadius(R_CARD)
+      .onClick((event: ClickEvent) => {
+        event.stopPropagation();
+      })
+      .shadow({ radius: 24, color: '#33000000', offsetY: 6 })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .backgroundColor('#99000000')
+    .onClick(() => {
+      this.closeLogin();
+    })
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        Row() {
+          CapsuleSegment({
+            labels: ['书架', '搜索', '发现', '书源'],
+            selectedIndex: this.pane,
+            compact: false,
+            onSelect: (index: number) => {
+              this.pane = index;
+              if (index === PANE_SHELF || index === PANE_SOURCE) {
+                this.refresh();
+              } else if (index === PANE_EXPLORE) {
+                this.refresh();
+                this.ensureExploreSource();
+                if (this.exploreLoadedFor !== this.exploreSourceId) {
+                  this.loadExploreCategories();
+                }
               }
-            }
-          },
-        })
+            },
+          })
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 6, bottom: 10 })
+
+        if (this.pane === PANE_SHELF) {
+          this.shelfPane()
+        } else if (this.pane === PANE_SEARCH) {
+          this.searchPane()
+        } else if (this.pane === PANE_EXPLORE) {
+          this.explorePane()
+        } else {
+          this.sourcePane()
+        }
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 6, bottom: 10 })
+      .height('100%')
+      .padding({ top: this.topInset })
+      .backgroundColor(C_BG)
 
-      if (this.pane === PANE_SHELF) {
-        this.shelfPane()
-      } else if (this.pane === PANE_SEARCH) {
-        this.searchPane()
-      } else if (this.pane === PANE_EXPLORE) {
-        this.explorePane()
-      } else {
-        this.sourcePane()
+      if (this.loginOpen) {
+        this.loginSheet()
       }
     }
     .width('100%')
     .height('100%')
-    .padding({ top: this.topInset })
-    .backgroundColor(C_BG)
   }
 }

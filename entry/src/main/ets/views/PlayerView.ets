@@ -3,7 +3,7 @@ import { K_BUFFERED_SECONDS, K_BUFFERING, K_CURRENT_ART, K_CURRENT_COVER, K_CURR
   K_CURRENT_QUALITY, K_CURRENT_SINGER, K_DURATION, K_LYRIC_LINES, K_LYRIC_STATUS, K_PLAYER_STATUS,
   K_PLAY_MODE, K_PROGRESS } from '../core/player/PlaySession';
 import { LyricLine, activeLyricIndex } from '../core/music/Lyric';
-import { K_LYRIC_BLUR, K_LYRIC_CENTERED, K_LYRIC_FONT_SIZE, K_LYRIC_KEEP_SCREEN,
+import { K_LYRIC_BLUR, K_LYRIC_CENTERED, K_LYRIC_FLOAT, K_LYRIC_FONT_SIZE, K_LYRIC_KEEP_SCREEN,
   K_SHOW_MINI_LYRIC } from '../core/settings/PlaySettings';
 import { I_CAST, I_CHECK_CIRCLE, I_CHEVRON_DOWN, I_COMMENT, I_DOWNLOAD, I_MORE_CIRCLE, I_NEXT, I_ORDER_PLAY,
   I_PAUSE, I_PLAY, I_PREV, I_QUEUE, I_REPEAT, I_REPEAT_ONE, I_SHARE, I_SHUFFLE, IconGlyph } from '../ui/Icons';
@@ -72,6 +72,7 @@ export struct PlayerView {
   };
 
   @StorageLink(K_SHOW_MINI_LYRIC) showMiniLyric: boolean = false;
+  @StorageLink(K_LYRIC_FLOAT) lyricFloat: boolean = false;
   @StorageLink(K_LYRIC_BLUR) lyricBlur: boolean = true;
   @StorageLink(K_LYRIC_CENTERED) lyricCentered: boolean = true;
   @StorageLink(K_LYRIC_FONT_SIZE) lyricFontSize: number = 19;
@@ -181,11 +182,12 @@ export struct PlayerView {
   /**
    * 歌词页不熄屏
    *
-   * 只有「全屏播放器停在歌词页」时才要求常亮：翻回封面页、关掉设置、
-   * 播放器收起，三种情况都要还原，所以每次页码/设置变化都重算一遍。
+   * 只有「全屏播放器停在歌词页」时才要求常亮：翻回封面页、详情页、关掉设置、
+   * 播放器收起，四种情况都要还原，所以每次页码/设置变化都重算一遍。
+   * 三页结构：0 = 封面页，1 = 详情页，2 = 歌词页。
    */
   private syncKeepScreenOn(): void {
-    this.onKeepScreenOn(this.lyricKeepScreen && this.pageIndex === 1);
+    this.onKeepScreenOn(this.lyricKeepScreen && this.pageIndex === 2);
   }
 
   private toast(message: string): void {
@@ -823,18 +825,37 @@ export struct PlayerView {
         .height(6)
         .borderRadius(3)
         .backgroundColor(this.pageIndex === 1 ? '#FFFFFF' : '#59FFFFFF')
+      Column()
+        .width(this.pageIndex === 2 ? 20 : 6)
+        .height(6)
+        .borderRadius(3)
+        .backgroundColor(this.pageIndex === 2 ? '#FFFFFF' : '#59FFFFFF')
     }
     .animation({ duration: 200, curve: Curve.EaseInOut })
     .onClick(() => {
-      const next: number = this.pageIndex === 0 ? 1 : 0;
-      this.pageIndex = next;
-      this.syncKeepScreenOn();
-      if (next === 0) {
-        this.controller.showPrevious();
-      } else {
-        this.controller.showNext();
-      }
+      // 封面页 → 详情页 → 歌词页 → 封面页 循环
+      const next: number = (this.pageIndex + 1) % 3;
+      this.changeIndex(next);
     })
+  }
+
+  /** 统一切换三页（封面/详情/歌词），并同步页码、常亮与 Swiper 位置 */
+  private changeIndex(index: number): void {
+    if (index === this.pageIndex) {
+      return;
+    }
+    const old: number = this.pageIndex;
+    this.pageIndex = index;
+    this.syncKeepScreenOn();
+    try {
+      if (old < index) {
+        this.controller.showNext();
+      } else {
+        this.controller.showPrevious();
+      }
+    } catch (e) {
+      // 滑动面板尚未挂载时忽略
+    }
   }
 
   /** 当前唱到的那句歌词；还没有时间轴（activeLine = -1）就退到第一句 */
@@ -860,13 +881,14 @@ export struct PlayerView {
   }
 
   /**
-   * 封面页的小歌词（设置 - 播放设置 - 播放页显示小歌词）
+   * 封面页的小歌词（设置 - 播放设置 - 播放页显示小歌词 / 歌词悬浮）
    *
    * 就是当前那一句 + 翻译，跟着播放进度走；没歌词时整块不占位。
+   * showMiniLyric 与 lyricFloat 任一开启都会显示（两者默认都关，保证不会强制悬浮）。
    */
   @Builder
   miniLyricBlock() {
-    if (this.showMiniLyric && this.currentLyric() !== null) {
+    if ((this.showMiniLyric || this.lyricFloat) && this.currentLyric() !== null) {
       Column({ space: 3 }) {
         Text(this.miniLyricText())
           .fontSize(this.lyricFontSize)
@@ -920,6 +942,10 @@ export struct PlayerView {
         centerX: '50%',
         centerY: '50%',
       })
+      // 点击封面进入歌曲详情页（Swiper 第 1 页），左右滑动切换三页仍由 Swiper 承担
+      .onClick(() => {
+        this.changeIndex(1);
+      })
 
       Row({ space: 12 }) {
         Column({ space: 7 }) {
@@ -965,6 +991,135 @@ export struct PlayerView {
     .width('100%')
     .height('100%')
     .padding({ left: 30, right: 30 })
+  }
+
+  /** 当前歌曲专辑名（从 musicInfoJson 解析，取不到给空串） */
+  private detailAlbum(): string {
+    const item: SongItem | null = PlaySession.getInstance().current;
+    if (item === null || item.musicInfoJson.length === 0) {
+      return '';
+    }
+    try {
+      const info: LxMusicInfo = JSON.parse(item.musicInfoJson) as LxMusicInfo;
+      return info.albumName !== undefined ? info.albumName : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** 当前歌曲来源名（PlaySession 队列条目上有 source 字段） */
+  private detailSource(): string {
+    const item: SongItem | null = PlaySession.getInstance().current;
+    return item !== null ? item.source : '';
+  }
+
+  /** 详情页里的一行元信息：左标签右值 */
+  @Builder
+  detailMeta(label: string, value: string) {
+    Row() {
+      Text(label)
+        .fontSize(12.5)
+        .fontColor('#8CFFFFFF')
+      Blank()
+      Text(value)
+        .fontSize(12.5)
+        .fontColor('#D9FFFFFF')
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+    }
+    .width('100%')
+  }
+
+  /**
+   * 详情页（Swiper 第 1 页）
+   *
+   * 封面大图 + 歌名 / 歌手 / 专辑 + 元信息（来源 / 音质 / 时长）+ 完整歌词。
+   * 左右滑动进出由 Swiper 承担，内部是独立 List：歌词可手动滚动（不跟随播放），
+   * 点某一句仍然会 seek 到那一句。
+   */
+  @Builder
+  detailPage() {
+    List() {
+      // 头部信息块
+      ListItem() {
+        Column({ space: 12 }) {
+          Stack() {
+            CoverArt({
+              url: this.cover,
+              name: this.name,
+              art: this.art,
+              appIcon: true,
+              boxSize: 190,
+              radius: this.coverRadius,
+              pending: this.status === 'loading',
+            })
+          }
+          .width(190)
+          .height(190)
+          .borderRadius(this.coverRadius)
+          .shadow({ radius: 30, color: '#66000000', offsetX: 0, offsetY: 14 })
+          .margin({ top: 6, bottom: 4 })
+
+          Text(this.name)
+            .fontSize(21)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(Color.White)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+          Text(this.singer)
+            .fontSize(13.5)
+            .fontColor('#A6FFFFFF')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+            .textAlign(TextAlign.Center)
+
+          // 元信息：专辑 / 来源 / 音质 / 时长
+          Column({ space: 6 }) {
+            if (this.detailAlbum().length > 0) {
+              this.detailMeta('专辑', this.detailAlbum())
+            }
+            this.detailMeta('来源', this.detailSource().length > 0 ? this.detailSource() : '未知')
+            this.detailMeta('音质', qualityLabel(this.quality))
+            this.detailMeta('时长', formatTime(this.duration))
+          }
+          .width('100%')
+          .padding({ top: 6 })
+        }
+        .width('100%')
+        .padding({ left: 26, right: 26, top: 4, bottom: 14 })
+      }
+
+      // 完整歌词：可手动滚动，不自动跟随播放
+      if (this.lyricLines.length === 0) {
+        ListItem() {
+          Column({ space: 8 }) {
+            Text('暂无歌词')
+              .fontSize(15)
+              .fontColor('#8CFFFFFF')
+          }
+          .width('100%')
+          .padding({ top: 18, bottom: 18 })
+        }
+      } else {
+        ForEach(this.lyricLines, (line: LyricLine, index: number) => {
+          ListItem() {
+            this.lyricLine(line, index)
+          }
+        }, (line: LyricLine, index: number) => `${index}_${line.time}_${line.text}`)
+      }
+
+      ListItem() {
+        Column().height(this.bottomInset + 96)
+      }
+    }
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .width('100%')
+    .height('100%')
+    .padding({ left: 4, right: 4 })
   }
 
   /** 一行歌词：点一下跳到那一句（字号/对齐来自设置 - 播放设置） */
@@ -1395,9 +1550,10 @@ export struct PlayerView {
         .height(56 + this.topInset)
         .padding({ left: 18, right: 18, top: this.topInset })
 
-        // 封面 / 歌词
+        // 封面 / 详情 / 歌词（三页：0 封面，1 详情，2 歌词）
         Swiper(this.controller) {
           this.coverPage()
+          this.detailPage()
           this.lyricPage()
         }
         .index(this.pageIndex)

@@ -58,6 +58,14 @@ export class BookEngine {
 
   private store: BookSourceStore = new BookSourceStore();
   private jar: BookCookieJar = new BookCookieJar();
+  /**
+   * 已填过账号密码的书源（内存态）：sourceId -> { name, password }
+   *
+   * 每次跑作业都会随 `job.login` 注入沙箱的 CUR_LOGIN（getLoginInfoMap），
+   * 规则在 jsLib / 变量里读得到；真正的登录态由 Cookie 罐（Set-Cookie）承载，
+   * 重启后需要重新登录。字段名与 Legado 的 loginInfo 一致。
+   */
+  private loginMap: Record<string, Record<string, Object>> = {};
   private controller: webview.WebviewController | null = null;
   private pageReady: boolean = false;
   private pendingReady: (() => void)[] = [];
@@ -268,6 +276,37 @@ export class BookEngine {
       });
     }
     return out;
+  }
+
+  /**
+   * 发现页「推荐」入口用的地址
+   *
+   * exploreUrl 有两种写法：裸 URL（本身就是推荐页）或「标题::地址」分类列表 /
+   * JSON 数组。裸 URL 直接返回；分类列表取第一个分类当推荐（多数书源第一个
+   * 就是「推荐 / 热门」）。解析不出返回空串（界面不显示推荐入口）。
+   */
+  exploreHomeUrl(sourceId: string): string {
+    try {
+      const raw: string = this.rawOf(sourceId);
+      const source: BookSource = JSON.parse(raw) as BookSource;
+      const text: string = sourceText(source, 'exploreUrl').trim();
+      if (text.length === 0) {
+        return '';
+      }
+      if (text.startsWith('[')) {
+        const arr = JSON.parse(text) as BookExploreCategory[];
+        return arr.length > 0 && arr[0].url !== undefined ? String(arr[0].url) : '';
+      }
+      const idx: number = text.indexOf('::');
+      if (idx >= 0) {
+        const firstLine: string = text.split('\n')[0];
+        const i2: number = firstLine.indexOf('::');
+        return i2 >= 0 ? firstLine.substring(i2 + 2).trim() : '';
+      }
+      return text;
+    } catch (e) {
+      return '';
+    }
   }
 
   // ------------------------------------------------------------ 动作
@@ -486,6 +525,69 @@ export class BookEngine {
     return out;
   }
 
+  // ------------------------------------------------------------ 登录
+
+  /** 书源声明的登录页地址（没有则为空串） */
+  loginUrlOf(sourceId: string): string {
+    try {
+      const raw: string = this.rawOf(sourceId);
+      const source: BookSource = JSON.parse(raw) as BookSource;
+      const url: string = sourceText(source, 'loginUrl').trim();
+      return url === '[object Object]' ? '' : url;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** 这个书源是否已填过账号密码（会话内） */
+  isLoggedIn(sourceId: string): boolean {
+    return this.loginMap[sourceId] !== undefined;
+  }
+
+  /**
+   * 登录（会话内）
+   *
+   * 只记录账号密码并走一次沙箱登录请求（loginUrl + 登录规则），把 Set-Cookie
+   * 存进 Cookie 罐；后续搜索 / 发现 / 详情作业都会把 CUR_LOGIN 带进沙箱。
+   * 返回的 message 供界面提示，不抛异常。
+   */
+  async login(sourceId: string, name: string, password: string): Promise<string> {
+    const info: BookSourceInfo | null = this.store.find(sourceId);
+    if (info === null) {
+      return '书源不存在';
+    }
+    const account: string = name.trim();
+    if (account.length === 0) {
+      return '请输入账号';
+    }
+    const loginUrl: string = this.loginUrlOf(sourceId);
+    if (loginUrl.length === 0) {
+      return '该书源没有登录页（loginUrl 为空）';
+    }
+    this.loginMap[sourceId] = { 'name': account, 'password': password };
+    try {
+      const data: Object = await this.run(sourceId, 'login', {
+        'url': loginUrl,
+      });
+      const record: Record<string, Object> = JSON.parse(JSON.stringify(data)) as Record<string, Object>;
+      const ok: string = this.textOf(record, 'success');
+      if (ok === 'true' || ok === '1' || ok === 'yes') {
+        return '登录成功';
+      }
+      const msg: string = this.textOf(record, 'message');
+      return msg.length > 0 ? `登录失败：${msg}` : '登录失败（站点返回了失败标记）';
+    } catch (e) {
+      return `登录失败：${(e as Error).message}`;
+    }
+  }
+
+  /** 登出：清掉会话内的账号密码（Cookie 罐与站点服务端无关） */
+  logout(sourceId: string): void {
+    if (this.loginMap[sourceId] !== undefined) {
+      delete this.loginMap[sourceId];
+    }
+  }
+
   /**
    * 跑一次书源动作
    *
@@ -512,7 +614,7 @@ export class BookEngine {
           throw new Error('解析超时：这本书的规则请求太多或站点响应太慢');
         }
         rounds++;
-        const job: string = this.buildJob(action, raw, params, netCache);
+        const job: string = this.buildJob(sourceId, action, raw, params, netCache);
         const result: BookRunResult = await this.runInSandbox(job, token);
         for (const line of (result.logs !== undefined ? result.logs : [])) {
           this.log(`[${sourceId}] ${line}`);
@@ -546,6 +648,7 @@ export class BookEngine {
 
   /** 拼一个动作的作业 JSON（源正文原样透传，宿主不改写书源） */
   private buildJob(
+    sourceId: string,
     action: string,
     sourceRaw: string,
     params: Record<string, Object>,
@@ -556,6 +659,11 @@ export class BookEngine {
       `"source":${sourceRaw}`,
       `"netCache":${JSON.stringify(netCache)}`,
     ];
+    // 已登录的书源把账号密码带进沙箱（CUR_LOGIN / getLoginInfoMap）
+    const login: Record<string, Object> | undefined = this.loginMap[sourceId];
+    if (login !== undefined) {
+      parts.push(`"login":${JSON.stringify(login)}`);
+    }
     parts.push(`"bookSourceName":""`);
     for (const key of Object.keys(params)) {
       parts.push(`${JSON.stringify(key)}:${JSON.stringify(params[key])}`);
