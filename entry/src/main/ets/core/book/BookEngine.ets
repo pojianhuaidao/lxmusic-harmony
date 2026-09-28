@@ -583,9 +583,16 @@ export class BookEngine {
 
   /** 登出：清掉会话内的账号密码（Cookie 罐与站点服务端无关） */
   logout(sourceId: string): void {
-    if (this.loginMap[sourceId] !== undefined) {
-      Reflect.deleteProperty(this.loginMap, sourceId);
+    if (this.loginMap[sourceId] === undefined) {
+      return;
     }
+    const next: Record<string, Record<string, Object>> = {};
+    for (const key in this.loginMap) {
+      if (key !== sourceId) {
+        next[key] = this.loginMap[key];
+      }
+    }
+    this.loginMap = next;
   }
 
   /**
