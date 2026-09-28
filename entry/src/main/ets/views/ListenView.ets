@@ -262,6 +262,21 @@ export struct ListenView {
     this.exploreStatus = '';
   }
 
+  /** 当前发现源需要登录且会话内还没登录（发现页横幅引导去登录） */
+  private exploreNeedLogin(): boolean {
+    if (this.exploreSourceId.length === 0) {
+      return false;
+    }
+    const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.exploreSourceId);
+    return info !== null && info.needLogin && !BookEngine.getInstance().isLoggedIn(this.exploreSourceId);
+  }
+
+  /** 登录面板标题：书源名（取不到就显示 id） */
+  private loginSourceName(): string {
+    const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.loginSourceId);
+    return info !== null ? info.name : this.loginSourceId;
+  }
+
   // ------------------------------------------------------------ 搜索
 
   private async doSearch(): Promise<void> {
@@ -703,10 +718,8 @@ export struct ListenView {
       .padding({ left: 16, right: 16, top: 4, bottom: 8 })
 
       // 当前发现源需要登录且还没登录：横幅引导去登录
-      if (this.exploreSourceId.length > 0) {
-        const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.exploreSourceId);
-        if (info !== null && info.needLogin && !BookEngine.getInstance().isLoggedIn(this.exploreSourceId)) {
-          Row({ space: 10 }) {
+      if (this.exploreNeedLogin()) {
+        Row({ space: 10 }) {
             Text('该书源需要登录')
               .fontSize(F_SUB)
               .fontColor(C_TEXT_SUB)
@@ -724,7 +737,6 @@ export struct ListenView {
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 2, bottom: 10 })
-        }
       }
 
       if (this.explorableSources().length === 0) {
@@ -1044,13 +1056,12 @@ export struct ListenView {
   loginSheet() {
     Column() {
       Column({ space: 18 }) {
-        const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.loginSourceId);
         Column({ space: 4 }) {
           Text('登录书源')
             .fontSize(17)
             .fontWeight(FontWeight.Medium)
             .fontColor(C_TEXT)
-          Text(info !== null ? info.name : this.loginSourceId)
+          Text(this.loginSourceName())
             .fontSize(F_SUB)
             .fontColor(C_TEXT_SUB)
             .maxLines(1)
@@ -1130,18 +1141,12 @@ export struct ListenView {
       .padding(20)
       .backgroundColor(C_CARD)
       .borderRadius(R_CARD)
-      .onClick((event: ClickEvent) => {
-        event.stopPropagation();
-      })
       .shadow({ radius: 24, color: '#33000000', offsetY: 6 })
     }
     .width('100%')
     .height('100%')
     .justifyContent(FlexAlign.Center)
     .backgroundColor('#99000000')
-    .onClick(() => {
-      this.closeLogin();
-    })
   }
 
   build() {
