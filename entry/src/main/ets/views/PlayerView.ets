@@ -900,7 +900,7 @@ export struct PlayerView {
           url: this.cover,
           name: this.name,
           art: this.art,
-          // 没有歌 / 没有封面 / 封面失效：兜底给聆听的应用图标（见 ui/Widgets.ets 的 CoverArt）
+          // 没有歌 / 没有封面 / 封面失效：兜底给听·音乐的应用图标（见 ui/Widgets.ets 的 CoverArt）
           appIcon: true,
           boxSize: 252,
           // 圆角来自外观设置（默认 12）

@@ -14,8 +14,8 @@ views/HistoryView.ets           最近播放（我的 - 快捷入口）：播放
 views/PanePage.ets              子页面外壳：单页签 Tabs + 页内悬浮迷你播放条（本地 / 历史 / 下载 / 云端四页共用）
 views/SongListPane.ets          歌曲列表（那四页、歌单详情、在线榜单、搜索结果共用）
 views/ImportPlaylistSheet.ets   导入歌单：粘贴分享链接 → 解析预览 → 落成本地歌单
-views/SettingsView.ets          设置（我的 - 设置卡）：搜索框、登录卡、音源/播放/下载/外观/关于 分组
-views/AboutView.ets             关于（设置 / 我的 - 帮助和反馈）：应用信息 + 作者/开源协议/仓库地址 + 反馈渠道
+views/SettingsView.ets          设置（我的 - 设置卡）：搜索框、音源/WebDAV 云端音乐/播放/下载/外观/关于 分组
+views/AboutView.ets             关于（设置 - 关于）：应用信息 + 作者/开源协议/仓库地址
 views/SourceSettingsView.ets    音源设置（真功能：导入在线音源、加载、删除、日志、离线自检）
 views/SearchView.ets            搜索页（真功能：一次聚合搜五平台 + 结果按平台筛选下拉框）
 views/PlayerView.ets            全屏播放器：封面页/歌词页横滑双页（歌词随进度自动滚动）
@@ -47,8 +47,7 @@ core/sync/CollectedPlaylists.ets 收藏歌单（收藏**线上**歌单，纯本�
 - 底部导航用官方成对变体：未选中 `house` / 选中 `house_fill`（我的 `person(_fill)`）。
   歌单与设置不再是页签（内容搬进了「我的」页），
   「我的」页那排快捷入口用 `folder`（本地音乐）/ `clock`（最近播放）/ `heart_fill`（收藏）/
-  `download`（下载管理）/ `cloud`（云端音乐），设置卡用 `gearshape` 与
-  `questionmark_circle`（帮助和反馈）。
+  `download`（下载管理）/ `cloud`（云端音乐），设置卡用 `gearshape`。
 - 其余：`magnifyingglass` 搜索、`record_circle` 音源、`music_note_list` 播放列表、
   `play_fill`/`pause_fill`/`backward_end_fill`/`forward_end_fill` 播放控制、
   `repeat`、`heart(_fill)`、`star_trophy` 榜单、`doc_plaintext` 分类、
@@ -101,7 +100,7 @@ core/sync/CollectedPlaylists.ets 收藏歌单（收藏**线上**歌单，纯本�
 
 | 控件 | 现在的做法 |
 | --- | --- |
-| 我的页快捷入口 / 歌单卡 | 照华为音乐的「我的」：图标 + 名字 + 条数的入口排（本地音乐 / 最近播放 / 收藏 / 下载管理 / 云端音乐）、一张自建歌单卡（`自建歌单 N` + 「新建歌单 / 歌单导入」浅灰动作区 + 歌单行）、一张设置卡（设置 / 帮助和反馈）。「收藏歌单」不在这张卡上 —— 收藏的是线上歌单，那一段跟着推荐页（见下面「收藏歌单」一节） |
+| 我的页快捷入口 / 歌单卡 | 照华为音乐的「我的」：图标 + 名字 + 条数的入口排（本地音乐 / 最近播放 / 收藏 / 下载管理 / 云端音乐）、一张自建歌单卡（`自建歌单 N` + 「新建歌单 / 歌单导入」浅灰动作区 + 歌单行）、一张设置卡（设置）。「收藏歌单」不在这张卡上 —— 收藏的是线上歌单，那一段跟着推荐页（见下面「收藏歌单」一节） |
 | 顶栏圆钮（搜索 / 导入 / 新建…）| 派音那颗钮的配方：10% 白底 + 纯白 1vp 描边，**去掉阴影、去掉轮廓光效** |
 | 两个下拉框 | **自己画胶囊 + 系统下拉菜单**（`bindMenu` + `Menu`/`MenuItem`），不是系统 `Select`：Select 自带一套内边距与高度（≥40vp），外面再套自绘框会出现「框一种尺寸、文字按另一种尺寸排」的错位。自绘后框高（36 / 30）、圆角（18 / 15）、内边距、箭头间距全可控 |
 | 标题栏 / 底部页签栏 / 半模态 | HDS 的系统材质（平台认可的表面，材质真能渲染） |

@@ -1,51 +1,13 @@
 /**
- * 洛雪同步协议的数据类型
+ * 洛雪音乐库的数据类型
  *
- * 与 lx-music-sync-server / lx-music-mobile 的约定逐字对齐：
- *   - 线上消息：message2call 的 `{name, path, data}` 调用 / `{name, error, data}` 应答；
+ * 与 lx-music-mobile / lx-music-sync-server 的约定逐字对齐：
  *   - 歌曲：`LX.Music.MusicInfoOnline`（id/name/singer/source/interval/meta）；
  *   - 列表：`LX.Sync.List.ListData`（defaultList / loveList / userList）；
  *   - 不喜欢：一整段纯文本规则（每行「歌名@歌手」）。
- * 只有格式一致，才能和官方桌面端、移动端连同一个服务端互相同步。
+ * 这些格式同时用于本地音乐库持久化与 WebDAV 备份文件（见 core/webdav/WebDavBackup）。
+ * 原「LX 同步协议」在线同步（WebSocket）已下线，连接 / 认证 / 同步方式相关类型已移除。
  */
-
-// ------------------------------------------------------------------ 连接
-
-/** 服务端 /ah 认证成功后下发的身份信息（LX.Sync.KeyInfo） */
-export interface SyncKeyInfo {
-  clientId: string;
-  key: string;
-  serverName: string;
-  /** 官方客户端有这两个字段，服务端会原样保存，我们照收照存 */
-  iv?: string;
-  deviceName?: string;
-}
-
-/** 服务器地址解析结果（对应洛雪 parseUrl） */
-export interface SyncUrlInfo {
-  href: string;
-  httpProtocol: string;
-  wsProtocol: string;
-  hostPath: string;
-}
-
-/** 同步状态（对应 LX.Sync.Status 的 status/message 部分） */
-export interface SyncStatus {
-  status: boolean;
-  message: string;
-}
-
-/** /ah 接口返回 */
-export interface SyncHttpResult {
-  code: number;
-  text: string;
-}
-
-/** RSA 密钥对（base64 的 DER：公钥 X.509、私钥 PKCS#8） */
-export interface RsaKeyPairB64 {
-  publicKey: string;
-  privateKey: string;
-}
 
 // ------------------------------------------------------------------ 歌曲
 
@@ -189,114 +151,6 @@ export const LIST_ID_LOVE: string = 'love';
 /** 内置收藏歌单的展示名 —— 与官方客户端叫法一致 */
 export const LOVE_LIST_NAME: string = '我的收藏';
 
-// ------------------------------------------------------------------ 协议常量
-
-/** 握手 / 认证 / 心跳相关的固定串，必须与官方实现逐字一致 */
-export const SYNC_HELLO_MSG: string = 'Hello~::^-^::~v4~';
-export const SYNC_ID_PREFIX: string = 'OjppZDo6';
-export const SYNC_AUTH_MSG: string = 'lx-music auth::';
-export const SYNC_MSG_AUTH_FAILED: string = 'Auth failed';
-export const SYNC_MSG_BLOCKED_IP: string = 'Blocked IP';
-export const SYNC_MSG_CONNECT: string = 'lx-music connect';
-/** 认证时在第四行声明自己是移动端，服务端会因此给连接发文本 ping */
-export const SYNC_CLIENT_TYPE: string = 'lx_music_mobile';
-
-export const SYNC_CODE_AUTH_FAILED: string = 'Auth failed';
-export const SYNC_CODE_MISSING_AUTH_CODE: string = 'Missing auth code';
-export const SYNC_CODE_GET_SERVICE_ID_FAILED: string = 'Get service id failed';
-export const SYNC_CODE_CONNECT_SERVICE_FAILED: string = 'Connect service failed';
-export const SYNC_CODE_CONNECTING: string = 'Connecting...';
-export const SYNC_CODE_LOW_SERVICE_VERSION: string =
-  'Sync server version too low, please upgrade server to latest';
-export const SYNC_CODE_HIGH_SERVICE_VERSION: string =
-  'Sync server version too high, please upgrade app to latest';
-
-export const SYNC_CLOSE_NORMAL: number = 1000;
-export const SYNC_CLOSE_FAILED: number = 4100;
-
-/** 各模块的能力版本：与服务端不一致时该模块不参与同步 */
-export const FEATURE_VERSION: Record<string, number> = { 'list': 1, 'dislike': 1 };
-
 /** 不喜欢规则的分隔符（与洛雪 SPLIT_CHAR 一致） */
 export const DISLIKE_NAME_SEP: string = '@';
 export const DISLIKE_NAME_ALIAS: string = '#';
-
-/** 服务端把客户端选择的方式翻转后使用（洛雪 TRANS_MODE），客户端只需回传用户选的那一项 */
-export const SYNC_LIST_MODES: string[] = [
-  'merge_local_remote',
-  'merge_remote_local',
-  'overwrite_local_remote',
-  'overwrite_remote_local',
-  'overwrite_local_remote_full',
-  'overwrite_remote_local_full',
-  'cancel',
-];
-
-/** 同步方式选择框要给用户看的信息 */
-export interface SyncModeOption {
-  value: string;
-  title: string;
-  desc: string;
-}
-
-export const LIST_MODE_OPTIONS: SyncModeOption[] = [
-  {
-    value: 'merge_local_remote',
-    title: '「本机列表」合并「远程列表」',
-    desc: '两边的列表合并到一起，重复的歌曲去掉（去掉的是被合并方的），不同的歌曲添加。',
-  },
-  {
-    value: 'merge_remote_local',
-    title: '「远程列表」合并「本机列表」',
-    desc: '两边的列表合并到一起，重复的歌曲去掉（去掉的是被合并方的），不同的歌曲添加。',
-  },
-  {
-    value: 'overwrite_local_remote',
-    title: '「本机列表」覆盖「远程列表」',
-    desc: '远程中 ID 相同的列表被本机列表替换（ID 不同的合并进来）。',
-  },
-  {
-    value: 'overwrite_remote_local',
-    title: '「远程列表」覆盖「本机列表」',
-    desc: '本机中 ID 相同的列表被远程列表替换（ID 不同的合并进来）。',
-  },
-  {
-    value: 'overwrite_local_remote_full',
-    title: '「本机列表」完全覆盖「远程列表」',
-    desc: '远程的所有列表被移除，然后替换成本机的列表。',
-  },
-  {
-    value: 'overwrite_remote_local_full',
-    title: '「远程列表」完全覆盖「本机列表」',
-    desc: '本机的所有列表被移除，然后替换成远程的列表。',
-  },
-];
-
-export const DISLIKE_MODE_OPTIONS: SyncModeOption[] = [
-  {
-    value: 'merge_local_remote',
-    title: '「本机规则」合并「远程规则」',
-    desc: '合并两边「不喜欢的歌曲」规则并去重。',
-  },
-  {
-    value: 'merge_remote_local',
-    title: '「远程规则」合并「本机规则」',
-    desc: '合并两边「不喜欢的歌曲」规则并去重。',
-  },
-  {
-    value: 'overwrite_local_remote',
-    title: '「本机规则」覆盖「远程规则」',
-    desc: '远程的规则被替换成本机的规则。',
-  },
-  {
-    value: 'overwrite_remote_local',
-    title: '「远程规则」覆盖「本机规则」',
-    desc: '本机的规则被替换成远程的规则。',
-  },
-];
-
-export const SYNC_MODE_CANCEL: SyncModeOption = {
-  value: 'cancel',
-  title: '取消同步',
-  desc: '不使用该模块的同步功能。',
-};

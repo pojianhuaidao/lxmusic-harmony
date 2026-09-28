@@ -15,8 +15,7 @@ import { immersiveMaterialFor, immersiveMaterialForDialog, isGlassMaterialSuppor
   thinGlass } from '../ui/Glass';
 import { DustLayer } from '../ui/Dust';
 import { SourceSandboxHost } from '../components/SourceSandboxHost';
-import { SyncManager, K_SYNC_STATUS } from '../core/sync/SyncManager';
-import { describeStatus, shouldNotifySyncMessage } from '../core/sync/SyncStatusText';
+import { SyncManager } from '../core/sync/SyncManager';
 import { buildTitleMaterial, HDS_BAR_HEIGHT, HDS_TITLE_BAR_HEIGHT } from '../ui/Hds';
 import { K_MATERIAL_LEVEL } from '../core/settings/AppearanceSettings';
 import { contentMaxWidthFor, K_BAR_MINI_WIDTH, publishedMiniBarWidth } from '../ui/Layout';
@@ -46,7 +45,6 @@ import { K_RECOMMEND_SOURCE, RecommendView } from '../views/RecommendView';
 import { SearchView } from '../views/SearchView';
 import { SettingsView } from '../views/SettingsView';
 import { SourceSettingsView } from '../views/SourceSettingsView';
-import { SyncModeContent } from '../views/SyncModeSheet';
 import { SyncSettingsView } from '../views/SyncSettingsView';
 import { CacheSettingsView } from '../views/CacheSettingsView';
 import { PlaySettingsView } from '../views/PlaySettingsView';
@@ -71,7 +69,7 @@ const PAGE_APPEARANCE: string = 'appearance';
 const PAGE_ONLINE: string = 'online';
 /** WebDAV 云端音乐设置（服务器地址 / 账号密码 / 曲库管理） */
 const PAGE_WEBDAV: string = 'webdav';
-/** 关于（作者 / 开源协议 / 仓库地址 / 反馈渠道） */
+/** 关于（作者 / 开源协议 / 仓库地址） */
 const PAGE_ABOUT: string = 'about';
 /** 设置（「我的」页那张卡的「设置」；原来是底部的一个页签，现在从「我的」里进） */
 const PAGE_SETTINGS: string = 'settings';
@@ -133,10 +131,6 @@ struct Index {
   @State bottomInset: number = 0;
   @State sourceSummary: string = '未加载音源';
   @State toast: string = '';
-  /** 同步方式选择框：服务端要求选择时由 SyncManager 回调打开 */
-  @State syncModeOpen: boolean = false;
-  @State syncModeKind: string = 'list';
-  @State syncModeServer: string = '';
   /** 歌单详情页当前打开的歌单（路由参数只收 Object，这里直接由壳层持有更省事） */
   @State routePlaylistId: string = '';
   @State routePlaylistName: string = '歌单';
@@ -229,33 +223,12 @@ struct Index {
     };
     PlaySession.getInstance().setNoticeListener(this.noticeListener);
 
-    // 同步模块的提示（认证失败、连接断开等）走同一条提示条；
-    // 服务端要同步方式时，把选择框弹出来，用户选完再回传给 SyncManager。
-    const sync = SyncManager.getInstance();
-    sync.setMessageListener((message: string) => {
-      // 「Connecting... / Wait syncing...」是过程消息，设置页里本来就实时显示着状态，
-      // 再弹一次提示条只会打扰用户；这里只提示需要用户知道的失败与断开。
-      if (!shouldNotifySyncMessage(message)) {
-        return;
-      }
-      const connected: boolean = AppStorage.get<boolean>(K_SYNC_STATUS) ?? false;
-      this.showToast(describeStatus(connected, message));
-    });
-    sync.setModeRequestListener((kind: string, serverName: string) => {
-      this.syncModeKind = kind;
-      this.syncModeServer = serverName;
-      this.syncModeOpen = true;
-    });
-
     this.setupWindow();
   }
 
   aboutToDisappear(): void {
     SourceEngine.getInstance().setLogListener(null);
     PlaySession.getInstance().setNoticeListener(null);
-    const sync = SyncManager.getInstance();
-    sync.setMessageListener(null);
-    sync.setModeRequestListener(null);
     const win = this.mainWindow;
     const listener = this.sizeListener;
     if (win !== null && listener !== null) {
@@ -686,21 +659,6 @@ struct Index {
   @Builder
   queueSheet() {
     PlayQueueContent({ bottomInset: this.bottomInset })
-  }
-
-  @Builder
-  syncModeSheet() {
-    SyncModeContent({
-      kind: this.syncModeKind,
-      serverName: this.syncModeServer,
-      bottomInset: this.bottomInset,
-      onPick: (mode: string) => {
-        this.syncModeOpen = false;
-        SyncManager.getInstance().answerMode(mode);
-      },
-    })
-      .width('100%')
-      .height('100%')
   }
 
   /**
@@ -1312,7 +1270,7 @@ struct Index {
                 topInset: this.topInset + HDS_TITLE_BAR_HEIGHT,
                 bottomInset: this.bottomInset + 96,
                 // 「我的」页里那一排快捷入口（本地音乐 / 最近播放 / 下载管理 / 云端音乐）、
-                // 那张设置卡的「设置 / 帮助和反馈」，以及云端音乐的「去设置」都走壳层路由
+                // 那张设置卡的「设置」，以及云端音乐的「去设置」都走壳层路由
                 onNavigate: (action: string) => {
                   this.onSettingAction(action);
                 },
@@ -1473,31 +1431,6 @@ struct Index {
       // ---------------------------------------------------- 删除粒子飘散
       // 全局唯一的一层：任何页面删除时调 dustBus.spray(x, y)，粒子就在那里散开
       DustLayer()
-
-      // ---------------------------------------------------- 同步方式选择
-      // 独立挂在 Stack 的另一个节点上：播放列表那个 bindSheet 已经占了最外层节点，
-      // 同一个节点叠两个 bindSheet 会互相干扰。
-      Column()
-        .width(1)
-        .height(1)
-        .position({ x: 0, y: 0 })
-        .bindSheet($$this.syncModeOpen, this.syncModeSheet(), {
-          preferType: SheetType.BOTTOM,
-          detents: [SheetSize.MEDIUM, SheetSize.LARGE],
-          detentSelection: SheetSize.MEDIUM,
-          dragBar: true,
-          showClose: true,
-          // 背景色必须显式改成透明：SheetOptions 的 backgroundColor 默认是 Color.White，
-          // 不透明的底色会把材质整片盖住（官方示例10 也是这么配的）
-          backgroundColor: isGlassMaterialSupported() ? Color.Transparent : undefined,
-          systemMaterial: immersiveMaterialForDialog(this.materialLevel),
-          title: { title: '同步方式' },
-          onDisappear: () => {
-            // 用户下滑关掉也算「取消同步」；已选过的话 answerMode 是空操作
-            this.syncModeOpen = false;
-            SyncManager.getInstance().answerMode('cancel');
-          },
-        })
     }
     .width('100%')
     .height('100%')

@@ -4,7 +4,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 
 import { BookEngine } from '../core/book/BookEngine';
 import { BookShelf, ShelvedBook } from '../core/book/BookShelf';
-import { BookHit, BookSourceInfo } from '../core/book/BookTypes';
+import { BookExploreCategory, BookHit, BookSourceInfo } from '../core/book/BookTypes';
 import { C_BG, C_CARD, C_DIVIDER, C_ICON, C_RED, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM,
   F_SUB, R_CARD } from '../ui/Theme';
 import { immersiveMaterialFor, thinGlass } from '../ui/Glass';
@@ -17,10 +17,11 @@ import { CoverArt, EmptyState, SectionTitle } from '../ui/Widgets';
 const DOMAIN: number = 0x0001;
 const TAG: string = 'ListenView';
 
-/** 三个分段：书架（我的书）/ 搜索（找书）/ 书源（导入与管理） */
+/** 四个分段：书架（我的书）/ 搜索（找书）/ 发现（分类逛）/ 书源（导入与管理） */
 const PANE_SHELF: number = 0;
 const PANE_SEARCH: number = 1;
-const PANE_SOURCE: number = 2;
+const PANE_EXPLORE: number = 2;
+const PANE_SOURCE: number = 3;
 
 /** 书源筛选里「不筛」的那一项 */
 const FILTER_ALL: string = '';
@@ -99,10 +100,10 @@ export struct BookRow {
  *
  * 「阅读（Legado）」书源的入口：导入书源 → 搜索 / 发现 → 打开一本书 → 播它的某一集。
  * 书源协议与音源完全不同（见 core/book/book_preload.js 的说明），所以这里是一套
- * 自己的三段式：**书架 / 搜索 / 书源**。
+ * 自己的四段式：**书架 / 搜索 / 发现 / 书源**。
  *
- * 三段放在一页里而不是拆成三个页签，是因为它们的使用频率差很多（书架天天看、
- * 书源一个月动一次），拆页签会让底栏变成五个，得不偿失。
+ * 四段放在一页里而不是拆成四个页签，是因为它们的使用频率差很多（书架天天看、
+ * 书源一个月动一次），拆页签会让底栏变成六个，得不偿失。
  */
 @Component
 export struct ListenView {
@@ -124,6 +125,15 @@ export struct ListenView {
   @State searched: boolean = false;
   @State status: string = '';
   @State filter: string = FILTER_ALL;
+  /** 发现（分类逛）：当前源 / 分类 / 结果 */
+  @State exploreSourceId: string = '';
+  @State exploreLoadedFor: string = '';
+  @State exploreCategories: BookExploreCategory[] = [];
+  @State exploreCategoryTitle: string = '';
+  @State exploreCategoryUrl: string = '';
+  @State exploreResults: BookHit[] = [];
+  @State exploring: boolean = false;
+  @State exploreStatus: string = '';
   /** 书源管理：导入状态 */
   @State busy: boolean = false;
   @State sourceStatus: string = '';
@@ -156,6 +166,80 @@ export struct ListenView {
       ids.push(s.id);
     }
     return ids;
+  }
+
+  // ------------------------------------------------------------ 发现（分类逛）
+
+  /** 能发现的源：至少有一个发现分类 */
+  private explorableSources(): BookSourceInfo[] {
+    return this.sources.filter((s: BookSourceInfo) => s.canExplore);
+  }
+
+  private exploreSourceLabel(): string {
+    if (this.exploreSourceId.length === 0) {
+      return '选择书源';
+    }
+    const info: BookSourceInfo | null = BookEngine.getInstance().getSource(this.exploreSourceId);
+    return info !== null ? info.name : '选择书源';
+  }
+
+  /** 保证 exploreSourceId 落在「可发现源」里（没有就选第一个） */
+  private ensureExploreSource(): void {
+    const list: BookSourceInfo[] = this.explorableSources();
+    if (this.exploreSourceId.length === 0 || BookEngine.getInstance().getSource(this.exploreSourceId) === null) {
+      this.exploreSourceId = list.length > 0 ? list[0].id : '';
+    }
+  }
+
+  /** 拉当前源的发现分类（切换源 / 首次进入时调用） */
+  private loadExploreCategories(): void {
+    this.ensureExploreSource();
+    this.exploreCategories = this.exploreSourceId.length > 0
+      ? BookEngine.getInstance().exploreCategories(this.exploreSourceId)
+      : [];
+    this.exploreLoadedFor = this.exploreSourceId;
+    this.exploreCategoryTitle = '';
+    this.exploreCategoryUrl = '';
+    this.exploreResults = [];
+    this.exploreStatus = '';
+  }
+
+  private selectExploreSource(id: string): void {
+    if (id === this.exploreSourceId) {
+      return;
+    }
+    this.exploreSourceId = id;
+    this.loadExploreCategories();
+  }
+
+  /** 点一个分类：拉这个分类下的书单 */
+  private async doExplore(cat: BookExploreCategory): Promise<void> {
+    if (this.exploreSourceId.length === 0 || cat.url.length === 0) {
+      return;
+    }
+    this.exploring = true;
+    this.exploreStatus = '';
+    this.exploreResults = [];
+    try {
+      const hits: BookHit[] = await BookEngine.getInstance().explore(this.exploreSourceId, cat.url, 1);
+      this.exploreResults = hits;
+      this.exploreCategoryUrl = cat.url;
+      this.exploreCategoryTitle = cat.title;
+      if (hits.length === 0) {
+        this.exploreStatus = '这个分类没抓到内容（站点可能需要登录，或规则结构有变）';
+      }
+    } catch (e) {
+      this.exploreStatus = `加载失败：${(e as Error).message}`;
+    } finally {
+      this.exploring = false;
+    }
+  }
+
+  private backToCategories(): void {
+    this.exploreCategoryTitle = '';
+    this.exploreCategoryUrl = '';
+    this.exploreResults = [];
+    this.exploreStatus = '';
   }
 
   // ------------------------------------------------------------ 搜索
@@ -494,6 +578,184 @@ export struct ListenView {
     .layoutWeight(1)
   }
 
+  // ------------------------------------------------------------ 发现分段
+
+  /** 发现书源筛选胶囊（仅列支持发现的源） */
+  @Builder
+  exploreSourcePill() {
+    Row({ space: 3 }) {
+      Text(this.exploreSourceLabel())
+        .fontSize(13)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(C_TEXT)
+        .maxLines(1)
+      IconGlyph({
+        symbol: I_CHEVRON_DOWN,
+        iconSize: 13,
+        color: C_TEXT_SUB,
+      })
+        .accessibilityLevel('no')
+    }
+    .height(30)
+    .padding({ left: 12, right: 8 })
+    .attributeModifier(thinGlass(15, false, '', this.materialLevel))
+    .systemMaterial(immersiveMaterialFor(this.materialLevel))
+    .bindMenu(this.exploreSourceMenu())
+    .accessibilityText(`发现书源：${this.exploreSourceLabel()}，点按切换`)
+    .accessibilityLevel('yes')
+  }
+
+  @Builder
+  exploreSourceMenu() {
+    Menu() {
+      ForEach(this.explorableSources(), (info: BookSourceInfo) => {
+        MenuItem({ content: info.name })
+          .onClick(() => {
+            this.selectExploreSource(info.id);
+          })
+      }, (info: BookSourceInfo) => info.id)
+    }
+  }
+
+  @Builder
+  explorePane() {
+    Column() {
+      Row({ space: 8 }) {
+        SectionTitle({ text: '发现' })
+        Blank()
+        if (this.explorableSources().length > 1) {
+          this.exploreSourcePill()
+        }
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 4, bottom: 8 })
+
+      if (this.explorableSources().length === 0) {
+        EmptyState({
+          icon: I_BOOK,
+          text: '没有支持发现的书源',
+          hint: '到「书源」分段导入一个带 exploreUrl 的听书书源（阅读/Legado JSON），就能按分类逛书了。',
+          topPadding: 48,
+        })
+      } else if (this.exploreCategoryUrl.length === 0) {
+        // 一级：分类列表
+        if (this.exploreCategories.length === 0) {
+          EmptyState({
+            icon: I_BOOK,
+            text: '这个书源没有发现分类',
+            hint: '书源声明了 exploreUrl 但解析不出分类，可能是规则写法特殊或已失效，换个书源试试。',
+            topPadding: 48,
+          })
+        } else {
+          List() {
+            ForEach(this.exploreCategories, (cat: BookExploreCategory) => {
+              ListItem() {
+                Row({ space: 12 }) {
+                  Text(cat.title)
+                    .fontSize(F_ITEM)
+                    .fontColor(C_TEXT)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                    .textAlign(TextAlign.Start)
+                  IconGlyph({ symbol: I_CHEVRON_RIGHT, iconSize: 18, color: C_TEXT_WEAK })
+                    .accessibilityLevel('no')
+                }
+                .width('100%')
+                .padding({ left: 16, right: 14, top: 14, bottom: 14 })
+                .onClick(() => {
+                  void this.doExplore(cat);
+                })
+                .accessibilityGroup(true)
+                .accessibilityText(`发现分类：${cat.title}`)
+                .accessibilityLevel('yes')
+              }
+            }, (cat: BookExploreCategory) => cat.url)
+            ListItem() {
+              Column().height(this.bottomInset + 96)
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .scrollBar(BarState.Off)
+          .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 16, endMargin: 0 })
+        }
+      } else {
+        // 二级：分类书单（带返回分类）
+        Row({ space: 10 }) {
+          Text(this.exploreCategoryTitle)
+            .fontSize(15)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(C_TEXT)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+            .textAlign(TextAlign.Start)
+          Text('返回分类')
+            .fontSize(14)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(C_RED)
+            .onClick(() => {
+              this.backToCategories();
+            })
+            .accessibilityText('返回发现分类')
+            .accessibilityLevel('yes')
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 2, bottom: 8 })
+
+        if (this.exploreStatus.length > 0) {
+          Text(this.exploreStatus)
+            .fontSize(F_SUB)
+            .fontColor(C_TEXT_SUB)
+            .width('100%')
+            .padding({ left: 16, right: 16, bottom: 4 })
+            .textAlign(TextAlign.Start)
+        }
+
+        if (this.exploring) {
+          Column() {
+            LoadingProgress().width(38).height(38).color(C_RED)
+          }
+          .width('100%')
+          .padding({ top: 48 })
+        } else if (this.exploreResults.length === 0) {
+          EmptyState({
+            icon: I_BOOK,
+            text: '这个分类还没有内容',
+            hint: '换一个分类试试，或到「书源」分段确认该书源规则是否可用。',
+            topPadding: 48,
+          })
+        } else {
+          List() {
+            ForEach(this.exploreResults, (hit: BookHit) => {
+              ListItem() {
+                BookRow({
+                  name: hit.name,
+                  subtitle: [hit.author, hit.kind, hit.status].filter((s: string) => s.length > 0).join(' · '),
+                  coverUrl: hit.coverUrl,
+                  badge: hit.sourceName,
+                  onTap: () => {
+                    this.onOpenBook(hit);
+                  },
+                })
+              }
+            }, (hit: BookHit) => hit.id)
+            ListItem() {
+              Column().height(this.bottomInset + 96)
+            }
+          }
+          .width('100%')
+          .layoutWeight(1)
+          .scrollBar(BarState.Off)
+          .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 84, endMargin: 0 })
+        }
+      }
+    }
+    .width('100%')
+    .layoutWeight(1)
+  }
+
   // ------------------------------------------------------------ 书源分段
 
   @Builder
@@ -646,13 +908,19 @@ export struct ListenView {
     Column() {
       Row() {
         CapsuleSegment({
-          labels: ['书架', '搜索', '书源'],
+          labels: ['书架', '搜索', '发现', '书源'],
           selectedIndex: this.pane,
           compact: false,
           onSelect: (index: number) => {
             this.pane = index;
             if (index === PANE_SHELF || index === PANE_SOURCE) {
               this.refresh();
+            } else if (index === PANE_EXPLORE) {
+              this.refresh();
+              this.ensureExploreSource();
+              if (this.exploreLoadedFor !== this.exploreSourceId) {
+                this.loadExploreCategories();
+              }
             }
           },
         })
@@ -664,6 +932,8 @@ export struct ListenView {
         this.shelfPane()
       } else if (this.pane === PANE_SEARCH) {
         this.searchPane()
+      } else if (this.pane === PANE_EXPLORE) {
+        this.explorePane()
       } else {
         this.sourcePane()
       }

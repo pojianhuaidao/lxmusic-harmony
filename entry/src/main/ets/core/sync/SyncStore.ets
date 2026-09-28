@@ -1,29 +1,14 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
-import { deviceInfo } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { LxListData, LxMusicInfoNew, LxUserListInfoFull, SyncKeyInfo } from './SyncTypes';
+import { LxListData, LxMusicInfoNew, LxUserListInfoFull } from './SyncTypes';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'SyncStore';
 
 const STORE_DIR: string = 'lx_sync';
-const CONFIG_FILE: string = 'config.json';
-const KEYS_FILE: string = 'keys.json';
 const LIST_FILE: string = 'list.json';
 const DISLIKE_FILE: string = 'dislike.json';
-
-/** 同步开关 / 服务器地址 / 设备名 */
-export interface SyncConfig {
-  enable: boolean;
-  host: string;
-  deviceName: string;
-  hostHistory: string[];
-}
-
-function defaultConfig(): SyncConfig {
-  return { enable: false, host: '', deviceName: '', hostHistory: [] };
-}
 
 export function defaultListData(): LxListData {
   return { defaultList: [], loveList: [], userList: [] };
@@ -92,73 +77,6 @@ export class SyncStore {
     }
   }
 
-  // ------------------------------------------------------------ 配置
-
-  loadConfig(): SyncConfig {
-    const text: string | null = this.readText(CONFIG_FILE);
-    const config: SyncConfig = defaultConfig();
-    if (text === null) {
-      config.deviceName = defaultDeviceName();
-      return config;
-    }
-    try {
-      const raw = JSON.parse(text) as SyncConfig;
-      config.enable = raw.enable === true;
-      config.host = typeof raw.host === 'string' ? raw.host : '';
-      config.deviceName = (typeof raw.deviceName === 'string' && raw.deviceName.length > 0)
-        ? raw.deviceName : defaultDeviceName();
-      config.hostHistory = Array.isArray(raw.hostHistory) ? raw.hostHistory : [];
-      return config;
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, 'parse config failed: %{public}s', JSON.stringify(e));
-      config.deviceName = defaultDeviceName();
-      return config;
-    }
-  }
-
-  saveConfig(config: SyncConfig): void {
-    try {
-      this.writeText(CONFIG_FILE, JSON.stringify(config));
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, 'save config failed: %{public}s', JSON.stringify(e));
-    }
-  }
-
-  // ------------------------------------------------------------ 身份密钥（按 serverId 存）
-
-  loadKey(serverId: string): SyncKeyInfo | null {
-    const text: string | null = this.readText(KEYS_FILE);
-    if (text === null) {
-      return null;
-    }
-    try {
-      const keys = JSON.parse(text) as Record<string, SyncKeyInfo>;
-      const info: SyncKeyInfo | undefined = keys[serverId];
-      return info === undefined ? null : info;
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, 'parse keys failed: %{public}s', JSON.stringify(e));
-      return null;
-    }
-  }
-
-  saveKey(serverId: string, info: SyncKeyInfo): void {
-    let keys: Record<string, SyncKeyInfo> = {};
-    const text: string | null = this.readText(KEYS_FILE);
-    if (text !== null) {
-      try {
-        keys = JSON.parse(text) as Record<string, SyncKeyInfo>;
-      } catch (e) {
-        keys = {};
-      }
-    }
-    keys[serverId] = info;
-    try {
-      this.writeText(KEYS_FILE, JSON.stringify(keys));
-    } catch (e) {
-      hilog.error(DOMAIN, TAG, 'save keys failed: %{public}s', JSON.stringify(e));
-    }
-  }
-
   // ------------------------------------------------------------ 音乐库（洛雪线上格式）
 
   /** 是否已经落过一份音乐库：用来区分「首次安装（界面就是空的）」 */
@@ -221,27 +139,6 @@ export class SyncStore {
       hilog.error(DOMAIN, TAG, 'save dislike rules failed: %{public}s', JSON.stringify(e));
     }
   }
-}
-
-/** 设备名：优先市场名，其次产品型号，最后落一个可读兜底 */
-export function defaultDeviceName(): string {
-  try {
-    const market: string = deviceInfo.marketName;
-    if (market !== undefined && market.length > 0) {
-      return market;
-    }
-    const model: string = deviceInfo.productModel;
-    if (model !== undefined && model.length > 0) {
-      return model;
-    }
-    const brand: string = deviceInfo.brand;
-    if (brand !== undefined && brand.length > 0) {
-      return `${brand} HarmonyOS`;
-    }
-  } catch (e) {
-    // 某些设备上 deviceInfo 取不到，走兜底
-  }
-  return 'HarmonyOS';
 }
 
 function normalizeMusics(input: LxMusicInfoNew[] | undefined): LxMusicInfoNew[] {

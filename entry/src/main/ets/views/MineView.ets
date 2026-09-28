@@ -9,7 +9,7 @@ import { K_DOWNLOAD_VERSION, DownloadManager } from '../core/download/DownloadMa
 import { K_WEBDAV_VERSION, WebDavLibrary } from '../core/webdav/WebDavLibrary';
 import { C_BG, C_CARD, C_CHEVRON, C_DIVIDER, C_FILL_SOFT, C_PRESSED, C_RED, C_RED_TINT, C_TEXT,
   C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SECTION, F_SUB, R_CARD } from '../ui/Theme';
-import { I_CHEVRON_RIGHT, I_CLOCK, I_CLOUD, I_DOWNLOAD, I_FOLDER, I_GEAR, I_HEART_FILLED, I_HELP,
+import { I_CHEVRON_RIGHT, I_CLOCK, I_CLOUD, I_DOWNLOAD, I_FOLDER, I_GEAR, I_HEART_FILLED,
   I_IMPORT, I_PLAYLIST, I_PLUS, IconGlyph } from '../ui/Icons';
 import { CoverArt, TopFade } from '../ui/Widgets';
 import { dustBus, DustPoint, dustPointOf } from '../ui/Dust';
@@ -45,7 +45,6 @@ interface MineLink {
 
 const LINKS: MineLink[] = [
   { icon: I_GEAR, label: '设置', action: 'settings' },
-  { icon: I_HELP, label: '帮助和反馈', action: 'about' },
 ];
 
 /**
@@ -53,7 +52,7 @@ const LINKS: MineLink[] = [
  *
  * 照华为音乐的「我的」重排：上面一排快捷入口（本地音乐 / 最近播放 / 收藏 / 下载管理 / 云端音乐），
  * 中间一张歌单卡（自建歌单 + 新建歌单 / 歌单导入 动作区 + 歌单列表），
- * 下面一张设置卡（设置 / 帮助和反馈）。
+ * 下面一张设置卡（设置）。
  *
  * 「收藏」指收藏的**歌**（内置那张收藏歌单，洛雪的 loveList），点进去是它的详情。
  * 「收藏歌单」（收藏别人的歌单）不在这里：那说的是推荐页上的在线歌单，
@@ -586,7 +585,7 @@ export struct MineView {
     .clip(true)
   }
 
-  /** 设置卡：设置 / 帮助和反馈（与华为音乐底部那张卡同构） */
+  /** 设置卡：设置（与华为音乐底部那张卡同构） */
   @Builder
   linksCard() {
     Column() {

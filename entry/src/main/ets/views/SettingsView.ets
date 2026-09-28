@@ -109,7 +109,7 @@ struct SettingRow {
 /**
  * 设置页
  *
- * 顶部是系统的 Search 组件；下面依次是登录卡、音源设置、播放/下载设置、外观、关于，
+ * 顶部是系统的 Search 组件；下面依次是音源设置、WebDAV 云端音乐、播放/下载设置、外观、关于，
  * 每一组都是一张白色圆角卡（与洛雪一致）。搜索词会过滤各组里的设置项。
  */
 @Component
@@ -180,56 +180,6 @@ export struct SettingsView {
             .onChange((value: string) => {
               this.keyword = value;
             })
-
-          // ------------------------------------------------ 登录音乐
-          Row({ space: 14 }) {
-            Stack({ alignContent: Alignment.Center }) {
-              Column()
-                .width(52)
-                .height(52)
-                .borderRadius(26)
-                .backgroundColor(C_FILL_SOFT_STRONG)
-              IconGlyph({
-              symbol: I_PERSON,
-              iconSize: 34,
-              color: '#FFFFFF',
-            })
-            }
-            .width(52)
-            .height(52)
-
-            Column({ space: 5 }) {
-              Text('登录音乐')
-                .fontSize(18)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(C_TEXT)
-                .width('100%')
-                .textAlign(TextAlign.Start)
-              Text('网易云 / QQ / 酷狗账号，扫码或 Cookie 登录')
-                .fontSize(F_SUB)
-                .fontColor(C_TEXT_WEAK)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-                .textAlign(TextAlign.Start)
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-
-            IconGlyph({
-              symbol: I_CHEVRON_RIGHT,
-              iconSize: 18,
-              color: C_CHEVRON,
-            })
-          }
-          .width('100%')
-          .height(88)
-          .padding({ left: 16, right: 14 })
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-          .onClick(() => {
-            this.onNavigate('login');
-          })
 
           // ------------------------------------------------ 音源
           this.cardGroup(GROUP_SOURCE)

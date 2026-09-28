@@ -196,7 +196,7 @@ documentViewPicker.save({ pickerMode: DocumentPickerMode.DOWNLOAD }).then((r) =>
 → `openSync(CREATE | READ_WRITE)`；同时去掉 `newFileNames`（DOWNLOAD 模式下该选项不生效）。
 失败时不再静默：原因（错误码 + 消息）写进 `DownloadItem.note`，列表里直接显示。
 
-真机验证：文件出现在「文件管理」的「最近」页，按应用分组显示（分组名 = 应用名「聆听」）；
+真机验证：文件出现在「文件管理」的「最近」页，按应用分组显示（分组名 = 应用名「听·音乐」）；
 hdc 截图证据见提交说明。
 
 ### 验收标准

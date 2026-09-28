@@ -468,12 +468,12 @@ export class DownloadManager {
    * 下载目录的展示名（设置页 / 下载管理里显示 / 提示用户去哪找）
    *
    * 目录是系统给的，这里把它裁成用户认得的写法：
-   *   `file://docs/storage/Users/currentUser/Download/com.example.listen` -> `下载/聆听`
+   *   `file://docs/storage/Users/currentUser/Download/com.example.listen` -> `下载/听·音乐`
    * 两处「翻译」的理由：
    *   1. 路径里的 `Download` 显示成「下载」——「文件管理」中文界面里那一条就叫「下载」，
    *      显示英文名用户会以为不是一个地方；
    *   2. DOWNLOAD 模式建的目录用的是**包名**（官方文档：自动创建在 `Download/包名/` 目录），
-   *      而「文件管理」界面里把它显示成应用名（「聆听」）—— 用户看到的是后者，
+   *      而「文件管理」界面里把它显示成应用名（「听·音乐」）—— 用户看到的是后者，
    *      所以末段等于自己的包名时换成应用名（见 displayDirName）。
    * 一次都没写进公共目录（保存对话框失败、全落在应用内目录）时如实说明。
    */
@@ -501,9 +501,9 @@ export class DownloadManager {
   /**
    * 目录末段换成用户认得的名字
    *
-   * 末段等于自己的包名（`com.example.listen`）时换成应用名（`聆听`）：物理目录用的是包名，
+   * 末段等于自己的包名（`com.example.listen`）时换成应用名（`听·音乐`）：物理目录用的是包名，
    * 但用户在「文件管理」里看到的是应用名，显示 `下载/com.example.listen` 会让人以为
-   * 跟文件管理里那个「聆听」不是一个地方。不是包名（别的机型/版本可能直接用应用名建目录）
+   * 跟文件管理里那个「听·音乐」不是一个地方。不是包名（别的机型/版本可能直接用应用名建目录）
    * 就原样返回 —— 这里不猜、也不写死任何名字。
    */
   private displayDirName(name: string): string {

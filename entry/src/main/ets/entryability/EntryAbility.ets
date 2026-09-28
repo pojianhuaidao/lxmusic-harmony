@@ -31,7 +31,7 @@ export default class EntryAbility extends UIAbility {
     LocalMusic.getInstance().init(this.context);
     // 云端音乐库（WebDAV）：同样有自己的索引与歌单侧表，也要早于 SyncManager.init
     WebDavLibrary.getInstance().init(this.context);
-    // 同步模块也要 Context：读配置、落音乐库、找 gzip 的临时目录，越早准备越好
+    // 同步模块也要 Context：读配置、落音乐库，越早准备越好
     SyncManager.getInstance().init(this.context);
     // 缓存：元数据（播放地址 / 歌词）与播放缓存都要沙箱目录，同样尽早初始化
     MediaCache.getInstance().init(this.context);
@@ -116,8 +116,6 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     // Ability has brought to foreground
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
-    // 同步开着但连接断了（被系统挂起 / 网络切换 / 服务端重启）时补一次连接
-    void SyncManager.getInstance().ensureConnected();
   }
 
   onBackground(): void {

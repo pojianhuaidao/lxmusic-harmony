@@ -141,8 +141,6 @@ export const I_FOLDER: Resource = $r('sys.symbol.folder');
 export const I_CLOCK: Resource = $r('sys.symbol.clock');
 /** 云端音乐 */
 export const I_CLOUD: Resource = $r('sys.symbol.cloud');
-/** 帮助和反馈（问号圈） */
-export const I_HELP: Resource = $r('sys.symbol.questionmark_circle');
 
 /**
  * 官方符号图标
