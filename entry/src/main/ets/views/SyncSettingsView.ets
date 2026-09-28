@@ -157,7 +157,6 @@ export struct SyncSettingsView {
           .fontColor(this.webdavUrl.length > 0 ? C_ICON_GREEN : C_RED)
       }
       .width('100%')
-      .textAlign(TextAlign.Start)
 
       if (this.webdavUrl.length > 0) {
         Text(`服务器：${this.webdavUrl}`)
@@ -196,7 +195,6 @@ export struct SyncSettingsView {
           .fontColor(C_TEXT)
       }
       .width('100%')
-      .textAlign(TextAlign.Start)
 
       Text(`远端目录：${BACKUP_DIR}`)
         .fontSize(F_SUB)

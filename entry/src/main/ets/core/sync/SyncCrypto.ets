@@ -2,7 +2,6 @@ import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { aes128EcbPkcs7EncryptBytes, aes128EcbPkcs7DecryptBytes, bytesToUtf8, fromBase64,
   md5Hex, toBase64, utf8Bytes } from '../music/LxCrypto';
-import { RsaKeyPairB64 } from './SyncTypes';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'SyncCrypto';
@@ -61,22 +60,6 @@ export function aesDecryptBase64(cipherB64: string, b64Key: string): string {
 }
 
 // ------------------------------------------------------------------ 非对称
-
-/**
- * 生成 RSA-2048 密钥对，导出格式与洛雪移动端原生模块一致：
- *   - 公钥：X.509(SPKI) DER 的 base64（认证时发给服务端，不带 PEM 头尾与换行）
- *   - 私钥：PKCS#8 DER 的 base64（用于解开服务端用公钥加密的身份信息）
- */
-export async function generateRsaKey(): Promise<RsaKeyPairB64> {
-  const generator = cryptoFramework.createAsyKeyGenerator('RSA2048');
-  const pair = await generator.generateKeyPair();
-  const pubDer: cryptoFramework.DataBlob = pair.pubKey.getEncoded();
-  const priDer: cryptoFramework.DataBlob = pair.priKey.getEncoded();
-  return {
-    publicKey: toBase64(u8ToNumbers(pubDer.data)),
-    privateKey: toBase64(u8ToNumbers(priDer.data)),
-  };
-}
 
 /** RSA-OAEP(SHA-1) 解密：输入 base64 密文与 PKCS#8 私钥 base64，输出 UTF-8 文本 */
 export async function rsaDecryptBase64(cipherB64: string, privateKeyB64: string): Promise<string> {

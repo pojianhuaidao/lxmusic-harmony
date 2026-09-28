@@ -1,4 +1,5 @@
 import { common } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LocalLibrary } from './LocalLibrary';
 import { SyncStore } from './SyncStore';
 import { PlaySession } from '../player/PlaySession';
