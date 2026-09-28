@@ -587,7 +587,9 @@ export class BookEngine {
       return;
     }
     const next: Record<string, Record<string, Object>> = {};
-    for (const key in this.loginMap) {
+    const keys: string[] = Object.keys(this.loginMap);
+    for (let i = 0; i < keys.length; i++) {
+      const key: string = keys[i];
       if (key !== sourceId) {
         next[key] = this.loginMap[key];
       }
