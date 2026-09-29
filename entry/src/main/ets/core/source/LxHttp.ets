@@ -1,4 +1,5 @@
 import { http } from '@kit.NetworkKit';
+import { socket } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AppLog } from '../log/AppLog';
@@ -167,6 +168,42 @@ function hasNonAscii(s: string): boolean {
 }
 
 /**
+ * TCP 分层诊断：绕过 http 栈直接对目标 host:port 发起 TCP 连接，
+ * 用于区分 V6 code=2300007（Failed to connect）到底是 DNS 解析失败、
+ * 网络不可达还是对端拒绝连接；若 TCP 通而 http 失败，问题在 TLS/应用层。
+ */
+function tcpDiag(host: string, port: number): void {
+  const tcp: socket.TCPSocket = socket.constructTCPSocketInstance();
+  const startMs: number = Date.now();
+  tcp.connect({
+    address: { address: host, port: port, family: 1 },
+    timeout: 8000,
+  })
+    .then(() => {
+      const elapsed: number = Date.now() - startMs;
+      AppLog.info(TAG, `TCP诊断 host=${host} port=${port} 成功 耗时=${elapsed}ms`);
+      hilog.info(DOMAIN, TAG, 'tcpDiag ok host=%{public}s port=%{public}d elapsed=%{public}dms', host, port, elapsed);
+      try {
+        tcp.close();
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'tcpDiag close failed: %{public}s', JSON.stringify(e));
+      }
+    })
+    .catch((err: BusinessError) => {
+      const elapsed: number = Date.now() - startMs;
+      const errCode: string = err.code !== undefined ? `${err.code}` : '?';
+      AppLog.error(TAG, `TCP诊断 host=${host} port=${port} 失败 code=${errCode} msg=${err.message} 耗时=${elapsed}ms`);
+      hilog.error(DOMAIN, TAG, 'tcpDiag failed host=%{public}s port=%{public}d code=%{public}s elapsed=%{public}dms',
+        host, err.message, errCode, elapsed);
+      try {
+        tcp.close();
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'tcpDiag close failed: %{public}s', JSON.stringify(e));
+      }
+    });
+}
+
+/**
  * 发起一次请求。
  * @returns 句柄，调用 abort() 可中断请求（对应源脚本里 lx.request 返回的 cancel 函数）
  */
@@ -289,13 +326,29 @@ export function lxRequest(
       }
       const elapsed: number = Date.now() - startMs;
       const errCode: string = err.code !== undefined ? `${err.code}` : '?';
-      const uaInfo: string = headers['User-Agent'] === DEFAULT_UA ? 'default' : 'custom';
+      // UA 显示实际值（截断前 100 字符），便于与安卓端/curl 对比请求指纹
+      const uaInfo: string = (headers['User-Agent'] !== undefined ? headers['User-Agent'] : '').substring(0, 100);
       // 诊断日志进 AppLog（关于页可见）：URL/域名/错误码/原始信息/耗时/UA/超时，
       // 用户真机复现后可直接复制反馈；DNS 解析对端 IP 由系统栈负责，日志以 host 为准
       AppLog.error(TAG,
         `请求失败 url=${url} host=${host} code=${errCode} msg=${err.message} 耗时=${elapsed}ms UA=${uaInfo} timeout=${timeout}ms`);
       hilog.error(DOMAIN, TAG, 'request failed: %{public}s %{public}s code=%{public}s elapsed=%{public}dms',
         url, err.message, errCode, elapsed);
+      // HTTP(S) 请求失败时追加 TCP 分层诊断：区分 DNS / TCP / TLS 层
+      const colonIdx: number = url.indexOf(':');
+      const scheme: string = colonIdx >= 0 ? url.substring(0, colonIdx).toLowerCase() : '';
+      if (scheme === 'https' || scheme === 'http') {
+        let diagPort: number = scheme === 'https' ? 443 : 80;
+        const hostColon: number = host.lastIndexOf(':');
+        if (hostColon >= 0) {
+          const tail: string = host.substring(hostColon + 1);
+          const parsedPort: number = parseInt(tail, 10);
+          if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535) {
+            diagPort = parsedPort;
+          }
+        }
+        tcpDiag(host, diagPort);
+      }
       onError(err.message);
     });
 

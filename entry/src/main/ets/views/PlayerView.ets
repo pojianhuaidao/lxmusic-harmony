@@ -128,6 +128,8 @@ export struct PlayerView {
   private coverSpringLastMs: number = 0;
 
   aboutToAppear(): void {
+    // 播放页组件实例化（打开播放器）即记录，用于确认播放页是否真的打开
+    AppLog.info(TAG, 'player page shown');
     // 打开播放器时可能已经唱到一半了，先把当前行对上，别等下一秒 timeUpdate
     this.activeLine = activeLyricIndex(this.lyricLines, this.progress);
     this.syncKeepScreenOn();
