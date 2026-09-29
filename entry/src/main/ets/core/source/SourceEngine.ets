@@ -20,7 +20,7 @@ import { SourceStore, ActiveSource } from './SourceStore';
 import { SeedBuiltin } from './SeedBuiltin';
 import { MAX_SCRIPT_SIZE, buildSourceInfo, sourceMetaKey } from './LxMetadata';
 import { LxRequestHandle, LxRequestOptions, LxResponse, lxRequest } from './LxHttp';
-import { AppLog } from '../core/log/AppLog';
+import { AppLog } from '../log/AppLog';
 import { utf8Bytes } from '../music/LxCrypto';
 
 const DOMAIN: number = 0x0001;

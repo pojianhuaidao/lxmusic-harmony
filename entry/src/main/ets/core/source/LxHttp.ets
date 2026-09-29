@@ -1,7 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { AppLog } from '../core/log/AppLog';
+import { AppLog } from '../log/AppLog';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LxHttp';

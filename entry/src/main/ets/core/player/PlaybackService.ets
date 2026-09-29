@@ -5,7 +5,7 @@ import { fileIo as fs, fileUri } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { AppLog } from '../core/log/AppLog';
+import { AppLog } from '../log/AppLog';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { PlaySettings } from '../settings/PlaySettings';
 import { LyricLine, activeLyricIndex, parseLyric } from '../music/Lyric';
