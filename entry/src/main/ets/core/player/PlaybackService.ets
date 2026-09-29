@@ -644,15 +644,27 @@ export class PlaybackService {
    * 用户改了「桌面歌词」开关后重新同步
    *
    * 关掉 -> 收起悬浮窗；打开 -> 组件还没启用就先启用，再按播放状态决定显隐。
+   * 支持性缓存未知（早期查询失败/没问过）时不直接放弃：先 probe 一次再决定，
+   * 避免开关被「支持性未知」静默吞掉。会话还没建（设置页先进来开了开关）时，
+   * 之后第一次播放会经 ensureSession -> setupDesktopLyric 按最新开关补 enable+sync。
    * 这个类仍然不依赖 PlaySession，只读一下设置单例，指令与状态照旧从外面推进来。
    */
   refreshDesktopLyric(): void {
     const session = this.session;
     const want: boolean = PlaySettings.getInstance().isDesktopLyric();
-    if (session !== null && want && this.lyricSupported && !this.lyricEnabled) {
-      session.enableDesktopLyric(true).then(() => {
-        this.lyricEnabled = true;
-        this.syncDesktopLyric();
+    if (session !== null && want && !this.lyricEnabled) {
+      // 支持性未知时先问一次系统（可能是早期 probe 失败留下的假「不支持」）
+      const probe: Promise<boolean> = this.lyricSupportKnown
+        ? Promise.resolve(this.lyricSupported)
+        : this.probeDesktopLyricSupport();
+      probe.then((supported: boolean) => {
+        if (!supported || this.lyricEnabled) {
+          return;
+        }
+        return session.enableDesktopLyric(true).then(() => {
+          this.lyricEnabled = true;
+          this.syncDesktopLyric();
+        });
       }).catch((err: BusinessError) => {
         hilog.warn(DOMAIN, TAG, 'enable desktop lyric failed: %{public}s', JSON.stringify(err));
       });

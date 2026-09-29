@@ -23,6 +23,10 @@ import { COVER_RADIUS_DEFAULT, K_COVER_RADIUS } from '../core/settings/Appearanc
 import { LyricMatchSheet } from './LyricMatchSheet';
 import { CommentSheet } from './CommentSheet';
 import { LOCAL_QUALITY_MARK, isFileQuality, qualityLabel, switchableQualitys } from '../core/music/Quality';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+
+const DOMAIN: number = 0x0001;
+const TAG: string = 'PlayerView';
 
 function formatTime(seconds: number): string {
   const total: number = Math.max(0, Math.floor(seconds));
@@ -842,26 +846,18 @@ export struct PlayerView {
   /**
    * 统一切换三页（封面/详情/歌词）。
    *
-   * 只驱动 Swiper 控制器（showNext/showPrevious），不再预先赋值 this.pageIndex：
-   * 之前先赋值会触发 .index() 受控跳转、随后又调控制器，两次跳转竞争导致
-   * 封面点击进详情失败。页码统一交给 Swiper.onChange 同步（onChange 已更新
-   * pageIndex 并调用 syncKeepScreenOn）；控制器未挂载时 catch 兜底直接同步页码。
+   * 只改 this.pageIndex，由 Swiper .index() 受控绑定驱动切页：受控模式下
+   * controller.showNext/showPrevious 与 .index() 冲突会被吞（真机实测无效），
+   * 改状态变量是最可靠路径。页码统一交给 Swiper.onChange 同步（onChange 已更新
+   * pageIndex 并调用 syncKeepScreenOn），这里也同步一次保持一致性。
    */
   private changeIndex(index: number): void {
     if (index === this.pageIndex) {
       return;
     }
-    try {
-      if (index > this.pageIndex) {
-        this.controller.showNext();
-      } else {
-        this.controller.showPrevious();
-      }
-    } catch (e) {
-      // Swiper 尚未挂载时直接同步页码，避免状态不一致
-      this.pageIndex = index;
-      this.syncKeepScreenOn();
-    }
+    hilog.info(DOMAIN, TAG, 'PLAYER changeIndex->%{public}d (from %{public}d)', index, this.pageIndex);
+    this.pageIndex = index;
+    this.syncKeepScreenOn();
   }
 
   /** 当前唱到的那句歌词；还没有时间轴（activeLine = -1）就退到第一句 */
@@ -916,6 +912,14 @@ export struct PlayerView {
       }
       .width('100%')
       .padding({ left: 4, right: 4 })
+    } else if ((this.showMiniLyric || this.lyricFloat) && this.currentId.length > 0) {
+      // 开关开了、有歌但当前歌没有歌词：给个可见反馈，别让用户以为开关没生效
+      Text('当前歌曲无歌词')
+        .fontSize(Math.max(11, this.lyricFontSize * 0.72))
+        .fontColor('#99FFFFFF')
+        .textAlign(this.lyricCentered ? TextAlign.Center : TextAlign.Start)
+        .width('100%')
+        .padding({ left: 4, right: 4 })
     }
   }
 
@@ -950,6 +954,7 @@ export struct PlayerView {
       })
       // 点击封面进入歌曲详情页（Swiper 第 1 页），左右滑动切换三页仍由 Swiper 承担
       .onClick(() => {
+        hilog.info(DOMAIN, TAG, 'PLAYER tapCover');
         this.changeIndex(1);
       })
 
@@ -1570,6 +1575,7 @@ export struct PlayerView {
         .layoutWeight(1)
         .width('100%')
         .onChange((index: number) => {
+          hilog.info(DOMAIN, TAG, 'PLAYER swipe index=%{public}d', index);
           this.pageIndex = index;
           this.syncKeepScreenOn();
         })
