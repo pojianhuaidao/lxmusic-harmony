@@ -1,6 +1,7 @@
 import { bundleManager, common, Want } from '@kit.AbilityKit';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AppLog } from '../core/log/AppLog';
 import { C_BG, C_CARD, C_DIVIDER, C_ICON_BLUE, C_PRESSED, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB, R_CARD } from '../ui/Theme';
 import { HintText } from '../ui/SettingWidgets';
 import { I_EXTERNAL, IconGlyph } from '../ui/Icons';
@@ -42,9 +43,45 @@ export struct AboutView {
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
   @State version: string = '';
+  /** 运行日志展示文本（AppLog.dump() 的快照，定时刷新保持接近实时） */
+  @State logText: string = '';
+  private logTimer: number = -1;
 
   aboutToAppear(): void {
     this.version = readVersionName();
+    this.refreshLog();
+    // 每 2 秒刷新一次日志快照，避免用户开着关于页等日志时看不到新增
+    this.logTimer = setInterval(() => {
+      this.refreshLog();
+    }, 2000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.logTimer >= 0) {
+      clearInterval(this.logTimer);
+      this.logTimer = -1;
+    }
+  }
+
+  private refreshLog(): void {
+    this.logText = AppLog.dump();
+  }
+
+  /** 把当前日志全文复制到系统剪贴板（失败弹 toast 提示） */
+  private copyLog(): void {
+    const text: string = this.logText.length > 0 ? this.logText : '暂无日志';
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+      pasteboard.getSystemPasteboard().setData(data).then(() => {
+        this.toast('运行日志已复制');
+      }).catch((err: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'copy log failed: %{public}s', err.message);
+        this.toast('复制失败，请重试');
+      });
+    } catch (e) {
+      hilog.warn(DOMAIN, TAG, 'copy log create data failed: %{public}s', JSON.stringify(e));
+      this.toast('复制失败，请重试');
+    }
   }
 
   private toast(message: string): void {
@@ -178,6 +215,69 @@ export struct AboutView {
     .clip(true)
   }
 
+  /**
+   * 运行日志卡片：标题 + 「复制全部 / 刷新」按钮 + 可滚动、可长按选择的日志文本。
+   *
+   * 手机上连不上 logcat 时，用户在这里把最近的关键事件（播放失败、音源请求等）
+   * 复制出来反馈给开发者；文本同时开了 copyOption，长按也能手动选择复制。
+   */
+  @Builder
+  logCard() {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        Text('运行日志')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(C_TEXT)
+          .layoutWeight(1)
+          .textAlign(TextAlign.Start)
+        Button('复制全部')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .backgroundColor(C_ICON_BLUE)
+          .height(30)
+          .padding({ left: 12, right: 12 })
+          .onClick(() => {
+            this.copyLog();
+          })
+        Button('刷新')
+          .fontSize(13)
+          .fontColor(C_TEXT_SUB)
+          .backgroundColor(C_PRESSED)
+          .height(30)
+          .padding({ left: 12, right: 12 })
+          .onClick(() => {
+            this.refreshLog();
+          })
+      }
+      .width('100%')
+
+      Scroll() {
+        Text(this.logText.length > 0 ? this.logText : '暂无日志')
+          .fontSize(12)
+          .fontColor(C_TEXT_SUB)
+          .lineHeight(18)
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .copyOption(CopyOptions.LocalDevice)
+      }
+      .width('100%')
+      .height(260)
+      .scrollBar(BarState.Auto)
+      .align(Alignment.Top)
+
+      Text(`共 ${AppLog.count()} 条 · 内存环形日志（最多 200 条，重启即清空）`)
+        .fontSize(11)
+        .fontColor(C_TEXT_WEAK)
+        .width('100%')
+        .textAlign(TextAlign.Start)
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
+    .borderRadius(R_CARD)
+    .backgroundColor(C_CARD)
+  }
+
   build() {
     Column() {
       Scroll() {
@@ -188,6 +288,7 @@ export struct AboutView {
           this.appCard()
 
           this.aboutCard()
+          this.logCard()
           HintText({ text: '该软件在 GitHub 上以阿帕奇 2.0 协议开源，欢迎 Star、提 Issue 或提 PR。' })
         }
         .width('100%')

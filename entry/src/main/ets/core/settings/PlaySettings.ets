@@ -54,13 +54,6 @@ export const K_EXTEND_QUALITY: string = 'cfg_extend_quality';
 export const K_EXTEND_QUALITY_TYPE: string = 'cfg_extend_quality_type';
 export const K_PLAY_WITH_OTHERS: string = 'cfg_play_with_others';
 export const K_SHOW_MINI_LYRIC: string = 'cfg_show_mini_lyric';
-/**
- * 应用内歌词悬浮开关（封面页小歌词）
- *
- * 默认关：播放时不强制在封面上悬浮显示歌词，歌词在歌词页看；
- * 开启后才在封面页悬浮显示当前句。与桌面歌词（系统悬浮窗）相互独立。
- */
-export const K_LYRIC_FLOAT: string = 'cfg_lyric_float';
 export const K_LYRIC_BLUR: string = 'cfg_lyric_blur';
 export const K_LYRIC_CENTERED: string = 'cfg_lyric_centered';
 export const K_LYRIC_FONT_SIZE: string = 'cfg_lyric_font_size';
@@ -105,7 +98,6 @@ interface PlaySettingsData {
   extendQualityType?: string;
   playWithOthers?: boolean;
   showMiniLyric?: boolean;
-  lyricFloat?: boolean;
   lyricBlur?: boolean;
   lyricCentered?: boolean;
   lyricFontSize?: number;
@@ -156,8 +148,6 @@ export class PlaySettings {
   /** 与其他应用同时播放默认关（独占音频焦点，与洛雪 isHandleAudioFocus=true 一致） */
   private playWithOthers: boolean = false;
   private showMiniLyric: boolean = false;
-  /** 应用内歌词悬浮（封面页小歌词）默认关，开启后才悬浮 */
-  private lyricFloat: boolean = false;
   private lyricBlur: boolean = true;
   private lyricCentered: boolean = true;
   private lyricFontSize: number = LYRIC_FONT_DEFAULT;
@@ -236,7 +226,6 @@ export class PlaySettings {
       extendQualityType: this.extendQualityType,
       playWithOthers: this.playWithOthers,
       showMiniLyric: this.showMiniLyric,
-      lyricFloat: this.lyricFloat,
       lyricBlur: this.lyricBlur,
       lyricCentered: this.lyricCentered,
       lyricFontSize: this.lyricFontSize,
@@ -280,9 +269,6 @@ export class PlaySettings {
     if (data.showMiniLyric !== undefined) {
       this.showMiniLyric = data.showMiniLyric;
     }
-    if (data.lyricFloat !== undefined) {
-      this.lyricFloat = data.lyricFloat;
-    }
     if (data.lyricBlur !== undefined) {
       this.lyricBlur = data.lyricBlur;
     }
@@ -323,7 +309,6 @@ export class PlaySettings {
       AppStorage.setOrCreate(K_EXTEND_QUALITY_TYPE, this.extendQualityType);
       AppStorage.setOrCreate(K_PLAY_WITH_OTHERS, this.playWithOthers);
       AppStorage.setOrCreate(K_SHOW_MINI_LYRIC, this.showMiniLyric);
-      AppStorage.setOrCreate(K_LYRIC_FLOAT, this.lyricFloat);
       AppStorage.setOrCreate(K_LYRIC_BLUR, this.lyricBlur);
       AppStorage.setOrCreate(K_LYRIC_CENTERED, this.lyricCentered);
       AppStorage.setOrCreate(K_LYRIC_FONT_SIZE, this.lyricFontSize);
@@ -359,11 +344,6 @@ export class PlaySettings {
 
   isShowMiniLyric(): boolean {
     return this.showMiniLyric;
-  }
-
-  /** 应用内歌词悬浮（封面页小歌词）当前是否开启 */
-  isLyricFloat(): boolean {
-    return this.lyricFloat;
   }
 
   isLyricBlur(): boolean {
@@ -515,16 +495,6 @@ export class PlaySettings {
     }
     this.desktopLyric = value;
     AppStorage.setOrCreate(K_DESKTOP_LYRIC, value);
-    this.write();
-  }
-
-  /** 应用内歌词悬浮（封面页小歌词）开关 */
-  setLyricFloat(value: boolean): void {
-    if (value === this.lyricFloat) {
-      return;
-    }
-    this.lyricFloat = value;
-    AppStorage.setOrCreate(K_LYRIC_FLOAT, value);
     this.write();
   }
 

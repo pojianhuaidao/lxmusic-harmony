@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AppLog } from '../core/log/AppLog';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LxHttp';
@@ -18,7 +19,11 @@ const TAG: string = 'LxHttp';
 const DEFAULT_UA: string =
   'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36';
 
-const DEFAULT_TIMEOUT: number = 13000;
+/**
+ * 默认超时。调成 20s：部分音源（如 V6 的 /v4s/url 代理接口）要跨网转发、
+ * 冷启动较慢，13s 在弱网下容易先超时（表现为「Failed to connect to the server」）。
+ */
+const DEFAULT_TIMEOUT: number = 20000;
 
 export interface LxRequestOptions {
   method?: string;
@@ -130,6 +135,37 @@ function toHttpMethod(method: string): http.RequestMethod {
   }
 }
 
+/** 从 URL 里取出 host（含端口），拿不到时返回原 url 截断的前 60 字符 */
+function hostOf(url: string): string {
+  const schemeEnd: number = url.indexOf('://');
+  const start: number = schemeEnd >= 0 ? schemeEnd + 3 : 0;
+  let end: number = url.length;
+  const slash: number = url.indexOf('/', start);
+  if (slash >= 0 && slash < end) {
+    end = slash;
+  }
+  const q: number = url.indexOf('?', start);
+  if (q >= 0 && q < end) {
+    end = q;
+  }
+  const hash: number = url.indexOf('#', start);
+  if (hash >= 0 && hash < end) {
+    end = hash;
+  }
+  const host: string = url.substring(start, end);
+  return host.length > 0 ? host : url;
+}
+
+/** 是否含非 ASCII 字符（中文域名等 IDN）；http 栈对 IDN 支持不稳定，命中时预警 */
+function hasNonAscii(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) > 127) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * 发起一次请求。
  * @returns 句柄，调用 abort() 可中断请求（对应源脚本里 lx.request 返回的 cancel 函数）
@@ -144,6 +180,16 @@ export function lxRequest(
   let destroyed: boolean = false;
   const method: string = options.method !== undefined ? options.method.toUpperCase() : 'GET';
   const timeout: number = (options.timeout !== undefined && options.timeout > 0) ? options.timeout : DEFAULT_TIMEOUT;
+  const host: string = hostOf(url);
+
+  // IDN 预警：源脚本若把中文域名原样交给宿主，http 栈可能解析失败；V6 域名
+  // 88.lxmusic.xn--fiqs8s 已是 punycode，正常不会命中，但其它音源可能踩坑
+  if (hasNonAscii(host)) {
+    AppLog.warn(TAG, `IDN 域名「${host}」含非 ASCII 字符，http 栈可能解析失败，建议改用 punycode（xn-- 形式）`);
+    hilog.warn(DOMAIN, TAG, 'idn host detected: %{public}s', host);
+  }
+  const startMs: number = Date.now();
+  AppLog.info(TAG, `请求发起 ${method} ${url} timeout=${timeout}ms`);
 
   const headers: Record<string, string> = {};
   // 洛雪默认带 Accept: application/json
@@ -208,6 +254,8 @@ export function lxRequest(
         return;
       }
       const statusCode: number = resp.responseCode;
+      const elapsed: number = Date.now() - startMs;
+      AppLog.info(TAG, `请求成功 ${url} HTTP ${statusCode} 耗时=${elapsed}ms`);
       let body: string | Object | number[];
       if (options.binary === true) {
         const raw: string | Object | ArrayBuffer = resp.result;
@@ -239,7 +287,15 @@ export function lxRequest(
       if (destroyed) {
         return;
       }
-      hilog.error(DOMAIN, TAG, 'request failed: %{public}s %{public}s', url, err.message);
+      const elapsed: number = Date.now() - startMs;
+      const errCode: string = err.code !== undefined ? `${err.code}` : '?';
+      const uaInfo: string = headers['User-Agent'] === DEFAULT_UA ? 'default' : 'custom';
+      // 诊断日志进 AppLog（关于页可见）：URL/域名/错误码/原始信息/耗时/UA/超时，
+      // 用户真机复现后可直接复制反馈；DNS 解析对端 IP 由系统栈负责，日志以 host 为准
+      AppLog.error(TAG,
+        `请求失败 url=${url} host=${host} code=${errCode} msg=${err.message} 耗时=${elapsed}ms UA=${uaInfo} timeout=${timeout}ms`);
+      hilog.error(DOMAIN, TAG, 'request failed: %{public}s %{public}s code=%{public}s elapsed=%{public}dms',
+        url, err.message, errCode, elapsed);
       onError(err.message);
     });
 

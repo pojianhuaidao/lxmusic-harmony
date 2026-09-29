@@ -5,6 +5,7 @@ import { fileIo as fs, fileUri } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AppLog } from '../core/log/AppLog';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { PlaySettings } from '../settings/PlaySettings';
 import { LyricLine, activeLyricIndex, parseLyric } from '../music/Lyric';
@@ -343,6 +344,7 @@ export class PlaybackService {
       this.positionMs = positionMs;
     }
     this.state = next;
+    AppLog.info(TAG, `播放状态 ${status}`);
     if (next === avSession.PlaybackState.PLAYBACK_STATE_PLAY ||
       next === avSession.PlaybackState.PLAYBACK_STATE_PREPARE) {
       // 一开始播就要把后台任务立起来（必须在应用还处于前台时申请）

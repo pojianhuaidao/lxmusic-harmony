@@ -20,6 +20,7 @@ import { SourceStore, ActiveSource } from './SourceStore';
 import { SeedBuiltin } from './SeedBuiltin';
 import { MAX_SCRIPT_SIZE, buildSourceInfo, sourceMetaKey } from './LxMetadata';
 import { LxRequestHandle, LxRequestOptions, LxResponse, lxRequest } from './LxHttp';
+import { AppLog } from '../core/log/AppLog';
 import { utf8Bytes } from '../music/LxCrypto';
 
 const DOMAIN: number = 0x0001;
@@ -907,11 +908,13 @@ export class SourceEngine {
       }
     }
     this.pushLog('log', `音源请求：${options.method !== undefined ? options.method : 'get'} ${url}`);
+    AppLog.info(TAG, `音源请求 ${options.method !== undefined ? options.method : 'get'} ${url}`);
     const handle: LxRequestHandle = lxRequest(url, options, (resp: LxResponse) => {
       this.httpRequests.delete(requestKey);
       const excerpt: string = this.describeResponse(resp);
       this.lastResponseExcerpt = excerpt;
       this.pushLog(resp.ok ? 'info' : 'warn', `音源请求响应：${excerpt}`);
+      AppLog.info(TAG, `音源请求响应（${url}）：${excerpt}`);
       const body: NativeResponseBody = {
         statusCode: resp.statusCode,
         statusMessage: resp.statusMessage,
@@ -929,6 +932,7 @@ export class SourceEngine {
       const friendly: string = describeNetworkError(message, url);
       this.lastResponseExcerpt = `请求失败(${url})：${friendly}`;
       this.pushLog('warn', `音源请求失败（${url}）：${friendly}`);
+      AppLog.error(TAG, `音源请求失败（${url}）：${friendly}`);
       const envelope: NativeResponseMessage = {
         requestKey: requestKey,
         error: message,

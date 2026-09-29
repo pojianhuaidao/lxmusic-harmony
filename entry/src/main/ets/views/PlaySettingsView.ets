@@ -6,7 +6,7 @@ import { EXTEND_QUALITYS, EXTEND_QUALITY_LABELS, K_AUTO_MATCH_LYRIC, K_AUTO_RESU
   K_BLUETOOTH_LYRIC, K_DESKTOP_LYRIC,
   K_EXTEND_QUALITY,
   K_EXTEND_QUALITY_TYPE,
-  K_LYRIC_BLUR, K_LYRIC_CENTERED, K_LYRIC_FONT_SIZE, K_LYRIC_FLOAT, K_LYRIC_KEEP_SCREEN, K_PLAY_QUALITY, K_PLAY_WITH_OTHERS,
+  K_LYRIC_BLUR, K_LYRIC_CENTERED, K_LYRIC_FONT_SIZE, K_LYRIC_KEEP_SCREEN, K_PLAY_QUALITY, K_PLAY_WITH_OTHERS,
   K_SHOW_MINI_LYRIC, LYRIC_FONT_MAX, LYRIC_FONT_MIN, MAIN_QUALITYS, MAIN_QUALITY_LABELS,
   PlaySettings } from '../core/settings/PlaySettings';
 
@@ -82,7 +82,6 @@ export struct PlaySettingsView {
   @StorageLink(K_EXTEND_QUALITY_TYPE) extendType: string = 'hires';
   @StorageLink(K_PLAY_WITH_OTHERS) playWithOthers: boolean = false;
   @StorageLink(K_SHOW_MINI_LYRIC) showMiniLyric: boolean = false;
-  @StorageLink(K_LYRIC_FLOAT) lyricFloat: boolean = false;
   @StorageLink(K_LYRIC_BLUR) lyricBlur: boolean = true;
   @StorageLink(K_LYRIC_CENTERED) lyricCentered: boolean = true;
   @StorageLink(K_LYRIC_FONT_SIZE) fontSize: number = 19;
@@ -234,16 +233,8 @@ export struct PlaySettingsView {
                 PlaySettings.getInstance().setShowMiniLyric(next);
               },
             })
-            ToggleSetting({
-              label: '歌词悬浮',
-              value: this.lyricFloat,
-              onPick: (next: boolean) => {
-                PlaySettings.getInstance().setLyricFloat(next);
-              },
-            })
             HintText({
-              text: '「歌词悬浮」开启后，播放时会在封面页上悬浮显示当前歌词（不依赖'
-                + '「播放页显示小歌词」）；默认关闭，不会强制悬浮。',
+              text: '「播放页显示小歌词」开启后，播放时会在封面页上显示当前歌词；默认关闭，不会强制悬浮。',
             })
             ToggleSetting({
               label: '歌词页模糊效果',

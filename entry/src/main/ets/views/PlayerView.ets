@@ -3,8 +3,9 @@ import { K_BUFFERED_SECONDS, K_BUFFERING, K_CURRENT_ART, K_CURRENT_COVER, K_CURR
   K_CURRENT_QUALITY, K_CURRENT_SINGER, K_DURATION, K_LYRIC_LINES, K_LYRIC_STATUS, K_PLAYER_STATUS,
   K_PLAY_MODE, K_PROGRESS } from '../core/player/PlaySession';
 import { LyricLine, activeLyricIndex } from '../core/music/Lyric';
-import { K_LYRIC_BLUR, K_LYRIC_CENTERED, K_LYRIC_FLOAT, K_LYRIC_FONT_SIZE, K_LYRIC_KEEP_SCREEN,
+import { K_LYRIC_BLUR, K_LYRIC_CENTERED, K_LYRIC_FONT_SIZE, K_LYRIC_KEEP_SCREEN,
   K_SHOW_MINI_LYRIC } from '../core/settings/PlaySettings';
+import { AppLog } from '../core/log/AppLog';
 import { I_CAST, I_CHECK_CIRCLE, I_CHEVRON_DOWN, I_COMMENT, I_DOWNLOAD, I_MORE_CIRCLE, I_NEXT, I_ORDER_PLAY,
   I_PAUSE, I_PLAY, I_PREV, I_QUEUE, I_REPEAT, I_REPEAT_ONE, I_SHARE, I_SHUFFLE, IconGlyph } from '../ui/Icons';
 import { CoverArt, FavoriteHeart } from '../ui/Widgets';
@@ -76,7 +77,6 @@ export struct PlayerView {
   };
 
   @StorageLink(K_SHOW_MINI_LYRIC) showMiniLyric: boolean = false;
-  @StorageLink(K_LYRIC_FLOAT) lyricFloat: boolean = false;
   @StorageLink(K_LYRIC_BLUR) lyricBlur: boolean = true;
   @StorageLink(K_LYRIC_CENTERED) lyricCentered: boolean = true;
   @StorageLink(K_LYRIC_FONT_SIZE) lyricFontSize: number = 19;
@@ -856,6 +856,7 @@ export struct PlayerView {
       return;
     }
     hilog.info(DOMAIN, TAG, 'PLAYER changeIndex->%{public}d (from %{public}d)', index, this.pageIndex);
+    AppLog.info(TAG, `changeIndex->${index} (from ${this.pageIndex})`);
     this.pageIndex = index;
     this.syncKeepScreenOn();
   }
@@ -883,14 +884,14 @@ export struct PlayerView {
   }
 
   /**
-   * 封面页的小歌词（设置 - 播放设置 - 播放页显示小歌词 / 歌词悬浮）
+   * 封面页的小歌词（设置 - 播放设置 - 播放页显示小歌词）
    *
    * 就是当前那一句 + 翻译，跟着播放进度走；没歌词时整块不占位。
-   * showMiniLyric 与 lyricFloat 任一开启都会显示（两者默认都关，保证不会强制悬浮）。
+   * showMiniLyric 开启时显示（默认关，不会强制悬浮）。
    */
   @Builder
   miniLyricBlock() {
-    if ((this.showMiniLyric || this.lyricFloat) && this.currentLyric() !== null) {
+    if (this.showMiniLyric && this.currentLyric() !== null) {
       Column({ space: 3 }) {
         Text(this.miniLyricText())
           .fontSize(this.lyricFontSize)
@@ -912,7 +913,7 @@ export struct PlayerView {
       }
       .width('100%')
       .padding({ left: 4, right: 4 })
-    } else if ((this.showMiniLyric || this.lyricFloat) && this.currentId.length > 0) {
+    } else if (this.showMiniLyric && this.currentId.length > 0) {
       // 开关开了、有歌但当前歌没有歌词：给个可见反馈，别让用户以为开关没生效
       Text('当前歌曲无歌词')
         .fontSize(Math.max(11, this.lyricFontSize * 0.72))
@@ -955,6 +956,7 @@ export struct PlayerView {
       // 点击封面进入歌曲详情页（Swiper 第 1 页），左右滑动切换三页仍由 Swiper 承担
       .onClick(() => {
         hilog.info(DOMAIN, TAG, 'PLAYER tapCover');
+        AppLog.info(TAG, 'tapCover');
         this.changeIndex(1);
       })
 
@@ -1576,6 +1578,7 @@ export struct PlayerView {
         .width('100%')
         .onChange((index: number) => {
           hilog.info(DOMAIN, TAG, 'PLAYER swipe index=%{public}d', index);
+          AppLog.info(TAG, `swipe index=${index}`);
           this.pageIndex = index;
           this.syncKeepScreenOn();
         })
