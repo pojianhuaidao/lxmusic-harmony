@@ -236,6 +236,7 @@ export class PlaySettings {
       extendQualityType: this.extendQualityType,
       playWithOthers: this.playWithOthers,
       showMiniLyric: this.showMiniLyric,
+      lyricFloat: this.lyricFloat,
       lyricBlur: this.lyricBlur,
       lyricCentered: this.lyricCentered,
       lyricFontSize: this.lyricFontSize,
