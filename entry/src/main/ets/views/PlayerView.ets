@@ -839,22 +839,28 @@ export struct PlayerView {
     })
   }
 
-  /** 统一切换三页（封面/详情/歌词），并同步页码、常亮与 Swiper 位置 */
+  /**
+   * 统一切换三页（封面/详情/歌词）。
+   *
+   * 只驱动 Swiper 控制器（showNext/showPrevious），不再预先赋值 this.pageIndex：
+   * 之前先赋值会触发 .index() 受控跳转、随后又调控制器，两次跳转竞争导致
+   * 封面点击进详情失败。页码统一交给 Swiper.onChange 同步（onChange 已更新
+   * pageIndex 并调用 syncKeepScreenOn）；控制器未挂载时 catch 兜底直接同步页码。
+   */
   private changeIndex(index: number): void {
     if (index === this.pageIndex) {
       return;
     }
-    const old: number = this.pageIndex;
-    this.pageIndex = index;
-    this.syncKeepScreenOn();
     try {
-      if (old < index) {
+      if (index > this.pageIndex) {
         this.controller.showNext();
       } else {
         this.controller.showPrevious();
       }
     } catch (e) {
-      // 滑动面板尚未挂载时忽略
+      // Swiper 尚未挂载时直接同步页码，避免状态不一致
+      this.pageIndex = index;
+      this.syncKeepScreenOn();
     }
   }
 

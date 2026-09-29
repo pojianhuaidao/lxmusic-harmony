@@ -111,6 +111,8 @@ interface PlaySettingsData {
   lyricFontSize?: number;
   lyricKeepScreenOn?: boolean;
   desktopLyric?: boolean;
+  /** 桌面歌词默认关的一次性迁移标记：老版本（默认开）升级后首启回写 true */
+  desktopLyricMigrated?: boolean;
   autoMatchLyric?: boolean;
   bluetoothLyric?: boolean;
   autoResumeAfterInterrupt?: boolean;
@@ -161,10 +163,12 @@ export class PlaySettings {
   private lyricFontSize: number = LYRIC_FONT_DEFAULT;
   private lyricKeepScreenOn: boolean = true;
   /**
-   * 桌面歌词（系统歌词悬浮窗）默认开，与改动前的行为一致：
-   * 以前这个能力一接上就是「有词就显示」，没有开关；现在用户能关掉。
+   * 桌面歌词（系统歌词悬浮窗）默认关：不让歌词默认悬浮在桌面上。
+   * 老版本（v5 之前）默认开，升级时由 apply 里的 desktopLyricMigrated 一次性迁移为关。
    */
-  private desktopLyric: boolean = true;
+  private desktopLyric: boolean = false;
+  /** 桌面歌词迁移是否已完成：老数据（无标记）读到后强制为关并回写，之后尊重用户设置 */
+  private desktopLyricMigrated: boolean = true;
   /** 本地歌自动匹配歌词默认开，见 K_AUTO_MATCH_LYRIC 的说明 */
   private autoMatchLyric: boolean = true;
   /**
@@ -197,6 +201,11 @@ export class PlaySettings {
     if (text.length > 0) {
       try {
         this.apply(JSON.parse(text) as PlaySettingsData);
+        if (!this.desktopLyricMigrated) {
+          // 老版本升级：桌面歌词强制为关后回写迁移标记，之后正常读取用户设置
+          this.desktopLyricMigrated = true;
+          this.write();
+        }
       } catch (e) {
         hilog.warn(DOMAIN, TAG, 'failed to parse play settings: %{public}s', JSON.stringify(e));
       }
@@ -232,6 +241,7 @@ export class PlaySettings {
       lyricFontSize: this.lyricFontSize,
       lyricKeepScreenOn: this.lyricKeepScreenOn,
       desktopLyric: this.desktopLyric,
+      desktopLyricMigrated: this.desktopLyricMigrated,
       autoMatchLyric: this.autoMatchLyric,
       bluetoothLyric: this.bluetoothLyric,
       autoResumeAfterInterrupt: this.autoResumeAfterInterrupt,
@@ -281,7 +291,12 @@ export class PlaySettings {
     if (data.lyricKeepScreenOn !== undefined) {
       this.lyricKeepScreenOn = data.lyricKeepScreenOn;
     }
-    if (data.desktopLyric !== undefined) {
+    if (data.desktopLyric !== undefined && !data.desktopLyricMigrated) {
+      // 老版本（v5 之前）桌面歌词默认开、可能已落盘 true：升级后一律改为默认关，
+      // 由 init 回写迁移标记，之后才尊重用户自己的设置
+      this.desktopLyric = false;
+      this.desktopLyricMigrated = false;
+    } else if (data.desktopLyric !== undefined) {
       this.desktopLyric = data.desktopLyric;
     }
     if (data.autoMatchLyric !== undefined) {
