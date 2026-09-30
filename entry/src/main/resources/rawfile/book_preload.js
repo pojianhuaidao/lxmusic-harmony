@@ -454,6 +454,17 @@
     return new DOMParser().parseFromString(String(html || ''), 'text/html');
   }
 
+  /** 取片段根元素：DOMParser 会把 `<a href=..>..</a>` 包进 BODY，
+   *  单元素片段应取 body 下那个元素本身（JSOUP 语义的 item 根），
+   *  否则 readNode 会对着 BODY 取属性（href 等）→ 恒空 → 条目被跳过。 */
+  function fragmentRoot(doc) {
+    var body = doc && (doc.body || doc.documentElement);
+    if (body && body.children && body.children.length === 1) {
+      return body.children[0];
+    }
+    return body;
+  }
+
   function queryAll(html, selector) {
     if (!selector) { return []; }
     var doc = parseDoc(html);
@@ -525,6 +536,13 @@
       var name = parts.length > 1 ? parts[1] : '';
       var pos = null;
       if (parts.length > 2 && /^-?\d+$/.test(parts[2])) { pos = parseInt(parts[2], 10); }
+      // 老式缩写 `.name.idx`（阅读：.bd.0 表示 class=bd 取第 0 个），
+      // `.filter-ret` 这类多词类名也要按 class 处理而不是整段当 CSS。
+      if (type === '' && parts.length >= 2 && parts[0] === '') {
+        type = 'class';
+        name = parts[1];
+        pos = parts.length > 2 && /^-?\d+$/.test(parts[2]) ? parseInt(parts[2], 10) : null;
+      }
       var selector = '';
       if (type === 'class') { selector = '.' + name; }
       else if (type === 'id') { selector = '#' + name; }
@@ -896,7 +914,7 @@
     // 纯取值（`@text` 这种）直接用当前片段当根
     if (r.charAt(0) === '@') {
       var selfDoc = parseDoc(html);
-      var selfRoot = selfDoc.body;
+      var selfRoot = fragmentRoot(selfDoc);
       return readNode(selfRoot, r.slice(1));
     }
     var segments = splitTop(r, ['@']);
@@ -906,7 +924,42 @@
       if (accessor.length === 0) { accessor = 'text'; }
     }
     var selector = String(segments[0]).trim();
-    var nodes = queryAll(html, selector);
+    // 多段 CSS 链：`h2@a@href` 应解释为「h2 内的 a 的 href」（后代选择器 `h2 a`），
+    // 原来只拿第一段 `h2` 去查，h2 自身没有 href → 取空 → bookUrl 为空被跳过 →
+    // 整页「请求 200 但解析空」。这里把前 n-1 段拼成 CSS 后代链再查。
+    var cssSel = selector;
+    if (segments.length > 2) {
+      var chain = [];
+      for (var si = 0; si < segments.length - 1; si++) {
+        var segTxt = String(segments[si]).trim();
+        if (segTxt.length > 0) { chain.push(segTxt); }
+      }
+      cssSel = chain.join(' ');
+    }
+    // 纯字段名规则（`href` / `mobileulr` / `name` 这种，阅读 JSOUP 是对 item 根节点
+    // 取属性；只写一个词、无选择器特征时按属性/文本取当前片段根节点，否则会当 CSS
+    // 选择器去查 <href> 标签导致取空）
+    if (segments.length === 1 && /^[\w-]+$/.test(selector)) {
+      var selfDoc0 = parseDoc(html);
+      var selfRoot0 = fragmentRoot(selfDoc0);
+      // 片段根自身取该属性（`href` / `mobileulr` / `src` 等，JSOUP 的 item.attr）
+      if (selfRoot0 && selfRoot0.getAttribute) {
+        var rootAttr = readNode(selfRoot0, selector);
+        if (rootAttr && rootAttr.length > 0) { return rootAttr; }
+      }
+      // 片段根上没有该属性（如 bookList 返回 li、字段写 href 期望取内部链接）→
+      // 在片段内找第一个携带该属性的元素兜底
+      var attrNodes = queryAll(html, '[' + selector + ']');
+      if (attrNodes !== null && attrNodes.length > 0) {
+        var attrVal = readNode(attrNodes[0], selector);
+        if (attrVal && attrVal.length > 0) { return attrVal; }
+      }
+      // 都不是 → 按文本取值（`name` / `title` 这类文本字段）
+      var nn = queryAll(html, selector);
+      if (nn !== null && nn.length > 0) { return readNode(nn[0], 'text'); }
+      return readNode(selfRoot0, 'text');
+    }
+    var nodes = queryAll(html, cssSel);
     if (nodes === null || nodes.length === 0) {
       // CSS 不认（或没命中）→ 试阅读老式写法
       var legacy = legacyQuery(html, segments.slice(0, Math.max(1, segments.length - 1)));
@@ -914,7 +967,19 @@
         return readNode(legacy[0], accessor);
       }
       // 选择器不合法（queryAll 返回 null）或确实没命中：都是空结果
-      if (nodes === null || nodes.length === 0) { return ''; }
+      if (nodes === null || nodes.length === 0) {
+        // 兜底：bookList 常直接返回 `<a>` 等元素，字段写成 `a@href`（「item 自身属性」）。
+        // 选择器是单个标签名、且当前片段根元素正好是该标签时，按 JSOUP 的 item.attr 取属性。
+        if (accessor !== 'text' && accessor !== 'html' && accessor !== 'all' && accessor !== 'ownText') {
+          var selfDoc1 = parseDoc(html);
+          var selfRoot1 = fragmentRoot(selfDoc1);
+          if (selfRoot1 && selfRoot1.tagName && selfRoot1.tagName.toLowerCase() === String(selector).toLowerCase()) {
+            var selfVal = readNode(selfRoot1, accessor);
+            if (selfVal && selfVal.length > 0) { return selfVal; }
+          }
+        }
+        return '';
+      }
     }
     return nodes.length > 0 ? readNode(nodes[0], accessor) : '';
   }
@@ -938,6 +1003,8 @@
     var sel = path.replace(/^@XPath:\s*/i, '').replace(/^\/\//, '');
     sel = sel.replace(/\[contains\(@([\w-]+),\s*['"]([^'"]*)['"]\)\]/g, '[$1*="$2"]');
     sel = sel.replace(/\[@([\w-]+)\s*=\s*['"]([^'"]*)['"]\]/g, '[$1="$2"]');
+    // XPath 数字索引 div[5] → CSS nth-of-type(5)（jsdom querySelectorAll 不认 div[5]）
+    sel = sel.replace(/([a-zA-Z_][\w-]*)\[(\d+)\]/g, '$1:nth-of-type($2)');
     sel = sel.replace(/^\/+/, '');
     if (sel.length === 0 || sel.indexOf('::') >= 0) { return []; }
     var nodes = queryAll(html, sel);
@@ -945,6 +1012,24 @@
     var out = [];
     for (var i = 0; i < nodes.length; i++) { out.push(readNode(nodes[i], accessor)); }
     return out;
+  }
+
+  /** XPath 列表模式：返回命中的元素数组（供 evalList 取 outerHTML 用） */
+  function xpathListElements(html, rule) {
+    var doc = parseDoc(html);
+    var path = String(rule).trim();
+    // 去掉末尾的取值尾巴（/@attr、/text()），列表场景只要元素
+    var m = path.match(/\/(@[^/]+|text\(\))\s*$/);
+    if (m) { path = path.slice(0, m.index); }
+    var sel = path.replace(/^@XPath:\s*/i, '').replace(/^\/\//, '');
+    sel = sel.replace(/\[contains\(@([\w-]+),\s*['"]([^'"]*)['"]\)\]/g, '[$1*="$2"]');
+    sel = sel.replace(/\[@([\w-]+)\s*=\s*['"]([^'"]*)['"]\]/g, '[$1="$2"]');
+    // XPath 数字索引 div[5] → CSS nth-of-type(5)（jsdom querySelectorAll 不认 div[5]）
+    sel = sel.replace(/([a-zA-Z_][\w-]*)\[(\d+)\]/g, '$1:nth-of-type($2)');
+    sel = sel.replace(/^\/+/, '');
+    if (sel.length === 0 || sel.indexOf('::') >= 0) { return []; }
+    var nodes = queryAll(html, sel);
+    return nodes === null ? [] : nodes;
   }
 
   /** 正则列表：返回 [{ $0, $1, ... }]，供 `$['$0']` 取用（与阅读一致） */
@@ -1110,8 +1195,30 @@
       }
       return jsonPathList(root2, body.trim());
     }
-    // Default / CSS：返回每个元素的 outerHTML（下一级字段规则会在片段里找）
     var html = String(ctx.result === null || ctx.result === undefined ? '' : ctx.result);
+    if (mode === 'xpath') {
+      var xnodes = xpathListElements(html, body.trim());
+      return xnodes.map(function (n) { return n.outerHTML; });
+    }
+    // Default / CSS：返回每个元素的 outerHTML（下一级字段规则会在片段里找）
+    // bookList 级的 `||` 多分支（阅读 legado：多个候选选择器，取第一个能命中的）。
+    // 注意默认模式本身不拆 ||，但 evalList 的语义与字段级不同，这里显式处理。
+    if (body.indexOf('||') >= 0) {
+      var branches = splitTop(body, ['||']);
+      for (var bi = 0; bi < branches.length; bi++) {
+        var bstr = String(branches[bi]).trim();
+        if (bstr.length === 0) { continue; }
+        var bn = queryAll(html, bstr);
+        if (bn !== null && bn.length > 0) {
+          return bn.map(function (n) { return n.outerHTML; });
+        }
+        var bl = legacyQuery(html, splitTop(bstr, ['@']));
+        if (bl.length > 0) {
+          return bl.map(function (n) { return n.outerHTML; });
+        }
+      }
+      return [];
+    }
     var nodes = queryAll(html, body);
     if (nodes !== null && nodes.length > 0) {
       return nodes.map(function (n) { return n.outerHTML; });
@@ -1178,6 +1285,30 @@
     return '';
   }
 
+  /**
+   * 发现规则与搜索规则合并（阅读 legado：字段级「explore 优先、search 兜底」）
+   *
+   * 先把搜索规则全部拷过来，再用发现规则**非空**字段覆盖。
+   * 空字符串 / null / undefined 的发现字段视为「未配置」，保留搜索规则的值，
+   * 避免整条字段变成 '' 后误把条目 outerHTML 当值，也避免 bookUrl 取空被跳过。
+   */
+  function mergedRules(exploreRules, searchRules) {
+    var out = {};
+    var k;
+    if (searchRules) {
+      for (k in searchRules) { out[k] = searchRules[k]; }
+    }
+    if (exploreRules) {
+      for (k in exploreRules) {
+        var v = exploreRules[k];
+        if (v !== null && v !== undefined && String(v).trim().length > 0) {
+          out[k] = v;
+        }
+      }
+    }
+    return out;
+  }
+
   /** 逐条目求值时用的上下文：result 是条目本身，src 是它的文本形式 */
   function itemCtx(element, baseUrl, extra) {
     var ctx = new Ctx(element, baseUrl, '', extra);
@@ -1213,9 +1344,15 @@
     var source = job.source;
     var key = job.key === undefined ? '' : String(job.key);
     var page = job.page === undefined ? 1 : Number(job.page);
-    var rawUrl = isExplore
-      ? String(job.exploreUrl || job.url || source.exploreUrl || '')
-      : String(source.searchUrl || '');
+    // 发现页地址：宿主明确下发的分类 URL 优先（即使为空也不回退到整个 exploreUrl 声明）
+    var rawUrl;
+    if (isExplore) {
+      rawUrl = job.exploreUrl !== undefined && job.exploreUrl !== null
+        ? String(job.exploreUrl)
+        : String(job.url || source.exploreUrl || '');
+    } else {
+      rawUrl = String(source.searchUrl || '');
+    }
     if (rawUrl.trim().length === 0) {
       throw new Error(isExplore ? '该书源没有发现规则' : '该书源没有搜索规则');
     }
@@ -1226,7 +1363,10 @@
     ctx.src = body;
     ctx.baseUrl = typeof url === 'string' && url.indexOf('http') === 0 ? url : String(source.bookSourceUrl || '');
 
-    var rules = isExplore ? source.ruleExplore : source.ruleSearch;
+    // 发现规则字段缺失时用搜索规则兜底（与阅读 legado 行为一致）：
+    // 很多书源的 ruleExplore 只有空 bookList，字段全在 ruleSearch 里，
+    // 不兜底会导致条目 bookUrl 取空被跳过 → 「分类请求 200 但解析空」。
+    var rules = isExplore ? mergedRules(source.ruleExplore, source.ruleSearch) : source.ruleSearch;
     var elements = listField(rules, 'bookList', ctx);
     var out = [];
     for (var i = 0; i < elements.length && i < 200; i++) {
@@ -1270,7 +1410,7 @@
     var made = makeUpRule(text, ctx, jsOnly).trim();
     // 搜索 / 发现地址允许写成相对路径（`/search.php?...`），用书源自己的站址补全
     if (made.length > 0 && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(made)) {
-      made = absolute(String(lastSourceUrl() || ''), made);
+      made = absolute(String(lastSourceUrl() || (ctx && ctx.baseUrl) || ''), made);
     }
     return made;
   }
@@ -1483,6 +1623,34 @@
     var raw = String(source.exploreUrl || '').trim();
     var out = [];
     if (raw.length === 0) { return out; }
+    // 脚本型分类菜单（阅读 legado 支持 @js:/<js>）：执行后返回 [{title,url}] / [title::url] 数组
+    if (/^@js:/i.test(raw) || /^<js>/i.test(raw)) {
+      try {
+        var code = raw.replace(/^@js:/i, '').replace(/^<js>/i, '').replace(/<\/js>\s*$/i, '');
+        var v = runJS(code, new Ctx('', String(source.bookSourceUrl || ''), '', {}));
+        var list = jsValueToList(v);
+        for (var m = 0; m < list.length; m++) {
+          var obj = list[m];
+          if (obj === null || obj === undefined) { continue; }
+          if (typeof obj === 'object') {
+            var t = String(obj.title !== undefined ? obj.title : (obj.name || '')).trim();
+            var u = String(obj.url !== undefined ? obj.url : (obj.href || '')).trim();
+            if (t.length === 0) { continue; }
+            out.push({ title: t, url: u });
+          } else if (typeof obj === 'string') {
+            var s = String(obj).trim();
+            if (s.length === 0) { continue; }
+            var idx0 = s.indexOf('::');
+            if (idx0 > 0) { out.push({ title: s.slice(0, idx0).trim(), url: s.slice(idx0 + 2).trim() }); }
+            else { out.push({ title: s, url: s }); }
+          }
+        }
+        return out;
+      } catch (e) {
+        out.push({ title: '(分类脚本执行失败)', url: '' });
+        return out;
+      }
+    }
     if (raw.charAt(0) === '[') {
       try {
         var arr = JSON.parse(raw);
