@@ -705,7 +705,17 @@ export class BookEngine {
       );
     }
     try {
-      return JSON.parse(raw) as BookRunResult;
+      // ArkWeb 的 runJavaScript 会把页面返回值 JSON 序列化；而 book_preload.js 的
+      // __book_run__ 返回的是 JSON.stringify 后的字符串（与 __book_ping__ 相同），
+      // 因此 raw 实际是「字符串的字符串」（如 "{\"status\":\"ok\",...}"），必须
+      // 解析两次：第一层 JSON.parse 得到字符串，第二层才拿到 {status,data,...}。
+      // 若只解析一次，result 仍是字符串，status/data 全部取不到，explore/search
+      // 会按「空结果」返回，界面表现为「这个分类没抓到内容」。
+      let parsed: Object = JSON.parse(raw) as Object;
+      if (typeof parsed === 'string') {
+        parsed = JSON.parse(parsed as string) as Object;
+      }
+      return parsed as BookRunResult;
     } catch (e) {
       throw new Error(`书源沙箱返回了无法解析的内容：${raw.substring(0, 120)}`);
     }
