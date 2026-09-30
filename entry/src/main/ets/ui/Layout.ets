@@ -49,7 +49,14 @@ const TAB_BAR_COLLAPSED: number = 96;
 /** 两条栏之间的缝 */
 const BAR_GAP: number = 8;
 
-/** 宽屏下内容列的最大宽度：窗口再宽，正文也不跟着拉长 */
+/**
+ * 宽屏下内容列的最大宽度（历史预留值，当前已停用收窄）。
+ *
+ * 旧逻辑在平板（≥600vp）把内容收成 720vp 居中列，11.5 寸平板真机（窗口约
+ * 900+vp）上两侧会露出大片留白，看起来像「没铺满」。参照 QQ 音乐 iPad 版
+ * 的铺满观感，contentMaxWidthFor 现在直接返回 0（不限宽），本常量仅作历史
+ * 说明保留，不再参与计算。
+ */
 export const CONTENT_MAX_WIDTH: number = 720;
 
 /**
@@ -131,10 +138,15 @@ export function barMetricsFor(windowWidth: number, miniExpanded: boolean): BarMe
  * 调用方拿到 0 时用 LAYOUT_UNBOUNDED 当上限（等于不限宽）。
  */
 export function contentMaxWidthFor(windowWidth: number): number {
-  if (windowWidth <= 0 || !isWideWindow(windowWidth)) {
+  if (windowWidth <= 0) {
     return 0;
   }
-  return Math.min(windowWidth, CONTENT_MAX_WIDTH);
+  // 宽屏/平板内容一律铺满整窗（参照 QQ 音乐 iPad 版）：不再收成居中一列。
+  // 旧逻辑返回 min(windowWidth, CONTENT_MAX_WIDTH)，在 11.5 寸平板（窗口约
+  // 900+vp）上把内容锁在 720vp 居中，两侧各留百余 vp 白边，真机观感就是
+  // 「没有铺满整屏」。返回 0 = 不限宽，WidePane 会翻成 LAYOUT_UNBOUNDED，
+  // 内容列随窗口宽度铺满、不留左右白边。窗口尺寸变化时调用方会重算一次。
+  return 0;
 }
 
 /**
