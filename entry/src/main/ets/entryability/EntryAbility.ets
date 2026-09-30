@@ -1,4 +1,5 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
@@ -88,6 +89,19 @@ export default class EntryAbility extends UIAbility {
     try {
       const mainWindow: window.Window = windowStage.getMainWindowSync();
       mainWindow.setWindowLayoutFullScreen(true);
+      // 平板/大屏自动铺满：启动时兜底切到全屏窗口模式。配合 module.json5 的
+      // supportWindowMode 全支持，用户之后仍可自行分屏/拖拽；这里只覆盖「上次以
+      // 小窗/悬浮/分屏退出，窗口记忆把本次启动恢复成非全屏」导致的启动不满屏。
+      const wm: window.WindowMode = mainWindow.getWindowProperties().windowMode;
+      if (wm !== window.WindowMode.WINDOW_MODE_FULLSCREEN) {
+        mainWindow.setWindowMode(window.WindowMode.WINDOW_MODE_FULLSCREEN)
+          .then(() => {
+            hilog.info(DOMAIN, 'testTag', 'setWindowMode fullscreen ok, prevMode=%{public}d', wm);
+          })
+          .catch((err: BusinessError) => {
+            hilog.error(DOMAIN, 'testTag', 'setWindowMode fullscreen failed. Cause: %{public}s', JSON.stringify(err));
+          });
+      }
       const dark: boolean = this.isDarkMode();
       mainWindow.setWindowSystemBarProperties({
         statusBarContentColor: dark ? '#FFFFFF' : '#000000',

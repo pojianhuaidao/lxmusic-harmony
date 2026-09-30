@@ -48,6 +48,18 @@
         "backgroundModes": [
           "audioPlayback"
         ],
+        // 平板/大屏全屏适配：显式声明支持「全屏 + 分屏 + 悬浮」三种窗口模式，
+        // 并允许窗口调整大小（resizeable）。**关键：不能配 windowSize 的
+        // defaultWidth/defaultHeight** —— 一旦给了固定初始尺寸，平板（11.5 寸）启动
+        // 就会按那个手机尺寸开窗而不是铺满全屏，正是「不自动扩充整个屏幕」最常见
+        // 的配置根因；不配 = 交给系统按设备屏幕全屏启动（窗口记忆/自由窗口残留的
+        // 非全屏状态由 EntryAbility 启动时 setWindowMode 兜底）。
+        "resizeable": true,
+        "supportWindowMode": [
+          "fullscreen",
+          "split",
+          "floating"
+        ],
         "exported": true,
         "skills": [
           {
