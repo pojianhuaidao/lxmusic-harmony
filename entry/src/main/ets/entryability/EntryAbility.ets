@@ -2,7 +2,7 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
+import { window, display } from '@kit.ArkUI';
 import { PlaybackService } from '../core/player/PlaybackService';
 import { PlaySession } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
@@ -89,18 +89,26 @@ export default class EntryAbility extends UIAbility {
     try {
       const mainWindow: window.Window = windowStage.getMainWindowSync();
       mainWindow.setWindowLayoutFullScreen(true);
-      // 平板/大屏自动铺满：启动时兜底切到全屏窗口模式。配合 module.json5 的
-      // supportWindowMode 全支持，用户之后仍可自行分屏/拖拽；这里只覆盖「上次以
-      // 小窗/悬浮/分屏退出，窗口记忆把本次启动恢复成非全屏」导致的启动不满屏。
-      const wm: window.WindowMode = mainWindow.getWindowProperties().windowMode;
-      if (wm !== window.WindowMode.WINDOW_MODE_FULLSCREEN) {
-        mainWindow.setWindowMode(window.WindowMode.WINDOW_MODE_FULLSCREEN)
-          .then(() => {
-            hilog.info(DOMAIN, 'testTag', 'setWindowMode fullscreen ok, prevMode=%{public}d', wm);
-          })
-          .catch((err: BusinessError) => {
-            hilog.error(DOMAIN, 'testTag', 'setWindowMode fullscreen failed. Cause: %{public}s', JSON.stringify(err));
-          });
+      // 平板/大屏自动铺满兜底：若启动窗口明显小于屏幕（窗口记忆把上次的小窗/悬浮
+      // 尺寸恢复回来了），直接 resize 到屏幕尺寸铺满。真正的窗口模式（全屏/分屏/
+      // 悬浮）由 module.json5 的 supportWindowMode 声明；本 SDK 的 window 模块
+      // 没有 WindowMode / setWindowMode 可用，只能做尺寸兜底，resize 失败（如已
+      // 处于分屏）不阻塞启动。
+      try {
+        const rect = mainWindow.getWindowProperties().windowRect;
+        const dsp = display.getDefaultDisplaySync();
+        if (rect.width > 0 && rect.height > 0 &&
+          (rect.width < dsp.width * 0.9 || rect.height < dsp.height * 0.9)) {
+          mainWindow.resize(dsp.width, dsp.height)
+            .then(() => {
+              hilog.info(DOMAIN, 'testTag', 'resize to full screen ok');
+            })
+            .catch((err: BusinessError) => {
+              hilog.error(DOMAIN, 'testTag', 'resize to full screen failed. Cause: %{public}s', JSON.stringify(err));
+            });
+        }
+      } catch (e) {
+        hilog.error(DOMAIN, 'testTag', 'resize probe failed. Cause: %{public}s', JSON.stringify(e));
       }
       const dark: boolean = this.isDarkMode();
       mainWindow.setWindowSystemBarProperties({
