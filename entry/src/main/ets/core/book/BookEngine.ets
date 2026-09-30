@@ -759,10 +759,21 @@ export class BookEngine {
         await controller.runJavaScript(`window.__book_append__(${JSON.stringify(chunk)});`);
         offset += chunkSize;
       }
-      const execResult: string = await controller.runJavaScript('window.__book_exec__()');
+      const execResultRaw: string = await controller.runJavaScript('window.__book_exec__()');
+      // ArkWeb 的 runJavaScript 对字符串返回值会做 JSON 序列化（"ok" -> '"ok"'，见下方 ping 的 '""' 判空），
+      // 必须先反序列化再判等，否则成功返回 "ok" 会被误判成执行报错（错误文案里出现 "OK"）。
+      let execResult: string =
+        execResultRaw !== null && execResultRaw !== undefined ? execResultRaw : '';
+      if (execResult !== '') {
+        try {
+          const parsed: string = JSON.parse(execResult) as string;
+          execResult = parsed;
+        } catch (e) {
+          // 非 JSON（脚本错误回显的原始串），原样保留用于展示
+        }
+      }
       if (execResult !== 'ok') {
-        const detail: string =
-          execResult !== null && execResult !== undefined && execResult !== '' ? execResult : '未知';
+        const detail: string = execResult !== '' ? execResult : '未知';
         throw new Error(
           `听书沙箱注入失败：book_preload.js 执行报错（${detail}）。请确认在模拟器/真机上运行（预览器的 Web 是残缺桩）。`
         );
