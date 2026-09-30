@@ -817,7 +817,14 @@ export class BookEngine {
       if (raw === null || raw === undefined || raw === '' || raw === '""') {
         return false;
       }
-      const parsed: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+      // ArkWeb 的 runJavaScript 会把页面返回值 JSON 序列化；而 book_preload.js 的
+      // __book_ping__ 返回的是 JSON.stringify 后的字符串（见 IIFE 内实现），因此
+      // raw 实际是「字符串的字符串」（如 "{\"ok\":true,...}"），需解析两次：
+      // 第一层 JSON.parse 得到字符串，第二层才得到 {ok:true,...}。兼容两种形态。
+      let parsed: Record<string, Object> = JSON.parse(raw) as Record<string, Object>;
+      if (typeof parsed === 'string') {
+        parsed = JSON.parse(parsed as string) as Record<string, Object>;
+      }
       return parsed['ok'] === true;
     } catch (e) {
       return false;
