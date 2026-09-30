@@ -715,8 +715,18 @@ export class BookEngine {
    * 注入沙箱引擎（一次）
    *
    * 顺序不能反：book_preload.js 依赖 lx_utils.js 提供的 md5 / base64。
-   * 注入完用 `__book_ping__` 自检；字符串注入失败时改用 runJavaScriptExt
-   * （传字节）再来一次 —— 大脚本用字符串注入容易被 ArkWeb 静默吞掉。
+   *
+   * 注入方式说明（为什么分块）：
+   *   - lx_utils.js（15KB）可整段注入；
+   *   - book_preload.js（60KB）**必须分块注入**：ArkWeb 的 runJavaScript /
+   *     runJavaScriptExt 对较大脚本单次注入会被静默吞掉（Promise 返回 null
+   *     而不报错）。同项目音源 lx_preload.js 20KB 可成功、听书 60KB 必失败，
+   *     正是这条限制。参考 legado3（legado 鸿蒙定制版用 QuickJS 整段执行脚本、
+   *     无 WebView 注入长度限制）的思路：把大脚本切成小块送入页面收集，再由
+   *     页面侧 new Function 拼接整段执行 —— 等效「整段 eval」，但每次 IPC
+   *     只传约 16KB，规避注入上限。
+   *   - 注入完用 `__book_ping__` 自检；失败时把页面侧执行错误带回报错文案，
+   *     避免再出现「没有在页面里生效」这种无从下手的笼统提示。
    */
   private async ensureInjected(): Promise<void> {
     if (this.injected) {
@@ -730,12 +740,48 @@ export class BookEngine {
       throw new Error(BOOK_SANDBOX_UNAVAILABLE);
     }
     await controller.runJavaScript(this.utilsJs);
+    // 页面侧先放一个收集器 + 整段执行器（小段注入，不受长度限制影响）
+    const prep: string = await controller.runJavaScript(
+      'window.__book_chunks__ = [];' +
+        'window.__book_append__ = function (c) { window.__book_chunks__.push(c); };' +
+        'window.__book_exec__ = function () {' +
+        '  try { var fn = new Function(window.__book_chunks__.join("")); fn.call(window); return "ok"; }' +
+        '  catch (e) { return "ERR:" + String((e && e.message) || e); }' +
+        '};' +
+        'typeof window.__book_exec__'
+    );
+    if (prep !== null && prep !== undefined && prep !== '' && prep.indexOf('function') >= 0) {
+      // 分块送入 book_preload.js：每块约 16KB，单次注入不超 ArkWeb 限制
+      const chunkSize: number = 16384;
+      let offset: number = 0;
+      while (offset < this.preloadJs.length) {
+        const chunk: string = this.preloadJs.substring(offset, offset + chunkSize);
+        await controller.runJavaScript(`window.__book_append__(${JSON.stringify(chunk)});`);
+        offset += chunkSize;
+      }
+      const execResult: string = await controller.runJavaScript('window.__book_exec__()');
+      if (execResult !== 'ok') {
+        const detail: string =
+          execResult !== null && execResult !== undefined && execResult !== '' ? execResult : '未知';
+        throw new Error(
+          `听书沙箱注入失败：book_preload.js 执行报错（${detail}）。请确认在模拟器/真机上运行（预览器的 Web 是残缺桩）。`
+        );
+      }
+      const ok: boolean = await this.ping();
+      if (!ok) {
+        throw new Error(
+          '听书沙箱注入失败：book_preload.js 已执行但自检未通过。请确认在模拟器/真机上运行（预览器的 Web 是残缺桩）。'
+        );
+      }
+      this.injected = true;
+      return;
+    }
+    // 异常环境（页面侧收集器不可用）才回退旧路径：整段注入 + ArrayBuffer 重试
+    this.log('分块注入收集器不可用，回退整段 runJavaScript 注入');
     await controller.runJavaScript(this.preloadJs);
     let ok: boolean = await this.ping();
     if (!ok) {
       this.log('字符串注入未生效，改用 runJavaScriptExt（传字节）重试');
-      const bytes: Uint8Array = new Uint8Array(utf8Bytes(this.utilsJs));
-      await controller.runJavaScriptExt(bytes.buffer as ArrayBuffer);
       const bytes2: Uint8Array = new Uint8Array(utf8Bytes(this.preloadJs));
       await controller.runJavaScriptExt(bytes2.buffer as ArrayBuffer);
       ok = await this.ping();
