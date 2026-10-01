@@ -531,20 +531,41 @@
     for (var s = 0; s < segments.length; s++) {
       var seg = String(segments[s]).trim();
       if (seg.length === 0) { continue; }
+      // 段解析：兼容阅读老式写法
+      //   class.x / class.x.N / id.x / tag.x / children / text
+      //   .name / .name.N（.bd.0 → class=bd 取第 0 个）
+      //   tag.N（a.1 → 取第 2 个 a；div.0 → 第 1 个 div）裸标签缩写
+      //   class.a b c（多词类名 → 多类选择器 .a.b.c）
       var parts = seg.split('.');
-      var type = String(parts[0] || '').toLowerCase();
-      var name = parts.length > 1 ? parts[1] : '';
+      var type = '';
+      var name = '';
       var pos = null;
-      if (parts.length > 2 && /^-?\d+$/.test(parts[2])) { pos = parseInt(parts[2], 10); }
-      // 老式缩写 `.name.idx`（阅读：.bd.0 表示 class=bd 取第 0 个），
-      // `.filter-ret` 这类多词类名也要按 class 处理而不是整段当 CSS。
-      if (type === '' && parts.length >= 2 && parts[0] === '') {
+      if (parts.length > 0 && parts[0] === '') {
         type = 'class';
-        name = parts[1];
-        pos = parts.length > 2 && /^-?\d+$/.test(parts[2]) ? parseInt(parts[2], 10) : null;
+        name = parts.length > 1 ? parts[1] : '';
+        if (parts.length > 2 && /^-?\d+$/.test(parts[2])) { pos = parseInt(parts[2], 10); }
+      } else {
+        var head = String(parts[0] || '').toLowerCase();
+        if (head === 'class' || head === 'id' || head === 'tag' || head === 'children' || head === 'text') {
+          type = head;
+          name = parts.length > 1 ? parts[1] : '';
+          if (parts.length > 2 && /^-?\d+$/.test(parts[2])) { pos = parseInt(parts[2], 10); }
+        } else if (parts.length >= 2 && /^-?\d+$/.test(parts[1])) {
+          type = 'tag';
+          name = head;
+          pos = parseInt(parts[1], 10);
+        } else {
+          type = 'tag';
+          name = head;
+        }
       }
       var selector = '';
-      if (type === 'class') { selector = '.' + name; }
+      if (type === 'class') {
+        var tokens = String(name || '').split(/\s+/);
+        var kept = [];
+        for (var ti = 0; ti < tokens.length; ti++) { if (tokens[ti].length > 0) { kept.push(tokens[ti]); } }
+        selector = kept.length > 0 ? '.' + kept.join('.') : '*';
+      }
       else if (type === 'id') { selector = '#' + name; }
       else if (type === 'tag') { selector = name; }
       else if (type === 'children') { selector = '*'; }
@@ -1127,29 +1148,41 @@
 
   /** 处理 `tag.li<js></js>//a` 这种「js 段夹在普通规则之间」的写法 */
   function evalWithJsSegments(rule, ctx, isUrl) {
-    var re = /<js>([\s\S]*?)<\/js>/g;
-    if (!re.test(rule)) { return evalSingle(rule, ctx, isUrl); }
+    var srcRule = String(rule);
+    // 兼容 `a.0@href\n@js:##正则##替换###`（legado 字段级「正则替换管道」写法）：
+    // @js: 后面的 `##...` 不是脚本，而是对**前段结果**做正则替换（### 结尾=OnlyOne，
+    // 只替换第一个匹配）。先归一化成与 <js> 一样的段结构再统一处理。
+    srcRule = srcRule.replace(/(^|\n)@js:##/g, '$1<js-re>##');
+    srcRule = srcRule.replace(/(^|\n)@js:(?!##)/g, '$1<js>');
+    var re = /<js>([\s\S]*?)<\/js>|<js-re>([\s\S]*?)###/g;
+    if (!re.test(srcRule)) { return evalSingle(srcRule, ctx, isUrl); }
     re.lastIndex = 0;
     var out = '';
     var last = 0;
     var m;
     var isFirst = true;
-    while ((m = re.exec(rule)) !== null) {
-      var plain = rule.slice(last, m.index);
+    while ((m = re.exec(srcRule)) !== null) {
+      var plain = srcRule.slice(last, m.index);
       if (plain.trim().length > 0) {
         out = isFirst ? evalSingle(plain, ctx, isUrl) : applyToValue(out, plain, ctx, isUrl);
         isFirst = false;
       }
-      var sub = new Ctx(out !== '' ? out : ctx.result, ctx.baseUrl, ctx.src, {
-        book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
-      });
-      var v;
-      try { v = runJS(m[1], sub); } catch (e) { v = ''; }
-      out = v === null || v === undefined ? '' : String(v);
+      if (m[1] !== undefined) {
+        // `<js>` 脚本段：以当前结果（或原 result）为上下文执行脚本
+        var sub = new Ctx(out !== '' ? out : ctx.result, ctx.baseUrl, ctx.src, {
+          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+        });
+        var v;
+        try { v = runJS(m[1], sub); } catch (e) { v = ''; }
+        out = v === null || v === undefined ? '' : String(v);
+      } else {
+        // `<js-re>` 正则替换段：对前段结果执行 ## 管道；补回 ### 触发 OnlyOne
+        out = applyRegexPipeline(out, m[2] + '###');
+      }
       isFirst = false;
       last = re.lastIndex;
     }
-    var tail = rule.slice(last);
+    var tail = srcRule.slice(last);
     if (tail.trim().length > 0) {
       out = applyToValue(out, tail, ctx, isUrl);
     }
@@ -1226,6 +1259,9 @@
     var legacy = legacyQuery(html, splitTop(body, ['@']));
     if (legacy.length > 0) {
       return legacy.map(function (n) { return n.outerHTML; });
+    }
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[DBG] bookList rule=' + body + ' htmlLen=' + (html ? html.length : 0) + ' qa=' + (nodes ? nodes.length : 'null') + ' legacy=' + legacy.length);
     }
     return [];
   }
@@ -1374,6 +1410,9 @@
       // 不是整个列表页 —— 于是 `@js: JSON.parse(src)` 拿到的是本条 JSON
       var item = itemCtx(elements[i], ctx.baseUrl, { key: key, page: page });
       var bookUrl = field(rules, 'bookUrl', item);
+      if (typeof console !== 'undefined' && console.log && i < 3) {
+        console.log('[DBG] item#' + i + ' bookUrl=' + JSON.stringify(bookUrl).slice(0, 120) + ' itemLen=' + (typeof elements[i] === 'string' ? elements[i].length : 'n/a'));
+      }
       if (bookUrl.length === 0) { continue; }
       bookUrl = absolute(ctx.baseUrl, bookUrl);
       var name = field(rules, 'name', item);
