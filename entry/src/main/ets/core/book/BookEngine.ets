@@ -200,17 +200,22 @@ export class BookEngine {
     const loginUrl: string = source.loginUrl !== undefined && source.loginUrl !== null ? source.loginUrl : '';
     // 只有「loginUrl 且带 login 规则」才算需要登录；喜马拉雅等把专辑页填进
     // loginUrl 的源视为无需登录，避免出现「登录」入口却根本没有登录页。
-    const rawRec: Record<string, Object> = source as unknown as Record<string, Object>;
-    const loginRule: Object | undefined = rawRec['login'];
-    let hasLoginRule = false;
-    if (loginRule !== undefined && loginRule !== null) {
-      if (typeof loginRule === 'string') {
-        hasLoginRule = (loginRule as string).trim().length > 0;
-      } else {
-        const obj: Record<string, Object> = loginRule as Record<string, Object>;
-        const lu: Object | undefined = obj['url'];
-        hasLoginRule = lu !== undefined && lu !== null && String(lu).trim().length > 0;
+    // login 字段不在 BookSource 接口内，ArkTS 禁止直接索引访问，走 JSON 往返取值。
+    let hasLoginRule: boolean = false;
+    try {
+      const rawObj: Record<string, Object> = JSON.parse(JSON.stringify(source)) as Record<string, Object>;
+      const loginRule: Object | undefined = rawObj['login'];
+      if (loginRule !== undefined && loginRule !== null) {
+        if (typeof loginRule === 'string') {
+          hasLoginRule = (loginRule as string).trim().length > 0;
+        } else {
+          const obj: Record<string, Object> = loginRule as Record<string, Object>;
+          const lu: Object | undefined = obj['url'];
+          hasLoginRule = lu !== undefined && lu !== null && String(lu).trim().length > 0;
+        }
       }
+    } catch (e) {
+      hasLoginRule = false;
     }
     const candidate: BookSourceInfo = {
       id: '',
