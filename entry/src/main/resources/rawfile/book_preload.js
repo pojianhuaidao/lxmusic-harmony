@@ -80,6 +80,13 @@
   }
 
   /** 归一化请求描述（java.ajax 接的既可能是字符串，也可能是 `url,{json}`） */
+  /** legado 的 ,{...} 标记后缀（webView 等），剥离 */
+  function cleanMark(url) {
+    var s = String(url || '').trim();
+    if (s.length === 0) { return s; }
+    return s.replace(/,\s*\{[^{}]*\}\s*$/, '');
+  }
+
   function specOf(arg, extraHeaders) {
     var url = '';
     var options = {};
@@ -97,6 +104,7 @@
       url = String(arg);
     }
     url = String(url || '').trim();
+    url = cleanMark(url);
     // `url,{"method":"POST","body":"..."}` 这种写法
     var comma = url.lastIndexOf(',{');
     if (comma > 0) {
@@ -658,6 +666,23 @@
     this.page = (extra && extra.page !== undefined) ? extra.page : 1;
     this.title = (extra && extra.title) || (this.chapter ? this.chapter.name : '');
     this.fromBookInfo = !!(extra && extra.fromBookInfo);
+    // legado @put/@get 变量存储：条目级上下文用独立 vars，避免多条目互相覆盖
+    this.vars = (extra && extra.vars) || null;
+  }
+
+  /** @put 变量写入：优先条目级 ctx.vars，其次全局 PUT_STORE */
+  function putVar(ctx, key, val) {
+    var v = val === undefined ? '' : String(val);
+    if (ctx && ctx.vars) { ctx.vars[String(key)] = v; return v; }
+    PUT_STORE[String(key)] = v;
+    return v;
+  }
+
+  /** @get 变量读取：优先条目级 ctx.vars，其次全局 PUT_STORE */
+  function getVar(ctx, key) {
+    if (ctx && ctx.vars && ctx.vars[String(key)] !== undefined) { return String(ctx.vars[String(key)]); }
+    var v = PUT_STORE[String(key)];
+    return v === undefined ? '' : String(v);
   }
 
   function jsBindings(ctx) {
@@ -691,8 +716,11 @@
       decl += 'var ' + names[i] + ' = __bindings[' + JSON.stringify(names[i]) + '];';
     }
     var __bindings = b;
+    // 规则作者常在全角输入法下写出中文引号（“ ” ‘ ’），JS 语法不认 → 求值必挂。
+    // 仅当字符串字面量出现全角引号时兜底归一化为半角（不影响其他字符）。
+    var jsCode = String(code).replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
     /* eslint-disable no-eval */
-    return eval(decl + '\n' + String(code));
+    return eval(decl + '\n' + jsCode);
     /* eslint-enable no-eval */
   }
 
@@ -720,13 +748,13 @@
       encodeURI: function (s) { return encodeURIComponent(String(s)); },
       getString: function (rule, content, isUrl) {
         var sub = new Ctx(content === undefined || content === null ? ctx.result : content, ctx.baseUrl, ctx.src, {
-          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page, vars: ctx.vars,
         });
         return evalField(rule, sub, isUrl);
       },
       getStringList: function (rule, content) {
         var sub = new Ctx(content === undefined || content === null ? ctx.result : content, ctx.baseUrl, ctx.src, {
-          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page, vars: ctx.vars,
         });
         return evalList(rule, sub);
       },
@@ -736,8 +764,8 @@
       log: function (msg) { LOGS.push(String(msg)); },
       logType: function () { },
       toast: function () { },
-      put: function (key, value) { PUT_STORE[String(key)] = value === undefined ? '' : String(value); return value; },
-      get: function (key) { var v = PUT_STORE[String(key)]; return v === undefined ? '' : v; },
+      put: function (key, value) { return putVar(ctx, key, value); },
+      get: function (key) { return getVar(ctx, key); },
       reGetBook: function () { },
       refreshTocUrl: function () { },
       isRule: function (r) { return typeof r === 'string' && /^@|^\$[.[]|^\/\//.test(r); },
@@ -807,11 +835,17 @@
     // @get:{key} -> 变量
     text = text.replace(/@get:\{([^}]*)\}/g, function (whole, name) {
       var key = String(name).trim();
-      if (key === 'book') { return ctx.book ? String(ctx.book.bookUrl || '') : ''; }
+      if (key === 'book') {
+        // legado 语义：@get:{book} 取回 @put:{book:xxx} 存的变量（如喜马拉雅的 albumId）。
+        // 此前直接返回 ctx.book.bookUrl，导致 tocUrl 拼成 albumId=整条书页URL → track 接口
+        // 返回空 → 目录 0 章 → 播放失败。有变量时用变量，无变量才回退书 URL。
+        var vBook = getVar(ctx, 'book');
+        if (vBook.length > 0) { return vBook; }
+        return ctx.book ? String(ctx.book.bookUrl || '') : '';
+      }
       if (key === 'key') { return String(ctx.key); }
       if (key === 'page') { return String(ctx.page); }
-      var stored = PUT_STORE[key];
-      return stored === undefined ? '' : String(stored);
+      return getVar(ctx, key);
     });
     // {{ 表达式 }}
     text = text.replace(/\{\{([\s\S]*?)\}\}/g, function (whole, code) {
@@ -994,7 +1028,7 @@
         var jsBase = jsKey.length === 0 ? result : result[jsKey];
         if (jsBase === undefined) { return ''; }
         var subCtx = new Ctx(jsBase, ctx.baseUrl, '', {
-          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page, vars: ctx.vars,
         });
         try {
           var jsVal = runJS(jsCode2, subCtx);
@@ -1014,7 +1048,7 @@
           var pVal = '';
           if (pValRule.indexOf('$.') === 0) { pVal = jsonPathOne(result, pValRule); }
           else { pVal = result[pValRule] === undefined ? '' : String(result[pValRule]); }
-          if (typeof PUT_STORE !== 'undefined') { PUT_STORE[pKey] = pVal; }
+          if (typeof PUT_STORE !== 'undefined') { putVar(ctx, pKey, pVal); }
           var prePut = r.split('@put:')[0].trim();
           if (prePut.length === 0) { return pVal; }
           var vPut = result[prePut];
@@ -1042,6 +1076,54 @@
       return readNode(selfRoot, r.slice(1));
     }
     var segments = splitTop(r, ['@']);
+    // 选择器链末尾带 `@js:代码`（如恋听网 `tag.a@href@js:result+",{webView:\"true\"}"`）：
+    // 先把前面 n-1 段求值得到中间结果，再作为 result 执行该 JS 段拼出最终 URL。
+    // 此前把 `js:...` 当成 accessor → 取属性取空 → 章节 URL 回退成书页 → 播 HTML → CONTAINER_ERR。
+    var lastSeg = segments.length > 0 ? String(segments[segments.length - 1]).trim() : '';
+    if (segments.length >= 2 && /^js\s*:/i.test(lastSeg)) {
+      var preSegs = segments.slice(0, segments.length - 1);
+      var accAccessor = String(preSegs[preSegs.length - 1]).trim();
+      var cssSelPre = String(preSegs[0]).trim();
+      if (preSegs.length > 2) {
+        var chainPre = [];
+        for (var pi = 0; pi < preSegs.length; pi++) {
+          var ptxt = String(preSegs[pi]).trim();
+          if (ptxt.length > 0) { chainPre.push(ptxt); }
+        }
+        cssSelPre = chainPre.join(' ');
+      }
+      var jsCodeFull = lastSeg.replace(/^js\s*:/i, '').trim();
+      var preVal = '';
+      if (/^[\w-]+$/.test(accAccessor) && !/^[\w-]+$/.test(cssSelPre)) {
+        // 单属性取值（href/src/text 等）：查前段选择器取属性
+        var preNodes = queryAll(html, cssSelPre);
+        if (preNodes !== null && preNodes.length > 0) {
+          preVal = readNode(preNodes[0], accAccessor);
+        } else {
+          var preLegacy = legacyQuery(html, preSegs.slice(0, Math.max(1, preSegs.length - 1)));
+          if (preLegacy.length > 0) { preVal = readNode(preLegacy[0], accAccessor); }
+        }
+      } else {
+        var nodesPre = queryAll(html, cssSelPre);
+        if (nodesPre === null || nodesPre.length === 0) {
+          var legacyPre = legacyQuery(html, preSegs.slice(0, Math.max(1, preSegs.length - 1)));
+          if (legacyPre.length > 0) { nodesPre = [legacyPre[0]]; }
+        }
+        if (nodesPre !== null && nodesPre.length > 0) {
+          preVal = readNode(nodesPre[0], accAccessor === 'text' ? 'text' : accAccessor);
+        }
+      }
+      var subCtxJs = new Ctx(preVal, ctx.baseUrl, '', {
+        book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page, vars: ctx.vars,
+      });
+      try {
+        var jsValOut = runJS(jsCodeFull, subCtxJs);
+        return jsValOut === null || jsValOut === undefined ? '' : String(jsValOut);
+      } catch (e) {
+        // JS 段失败时保留前段结果，避免整个字段取空
+        return preVal;
+      }
+    }
     var accessor = 'text';
     if (segments.length > 1) {
       accessor = String(segments[segments.length - 1]).trim();
@@ -1273,7 +1355,7 @@
       if (m[1] !== undefined) {
         // `<js>` 脚本段：以当前结果（或原 result）为上下文执行脚本
         var sub = new Ctx(out !== '' ? out : ctx.result, ctx.baseUrl, ctx.src, {
-          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page, vars: ctx.vars,
         });
         var v;
         try { v = runJS(m[1], sub); } catch (e) { v = ''; }
@@ -1295,7 +1377,7 @@
   /** 把「后面的规则段」作用到前一段的结果上 */
   function applyToValue(value, rule, ctx, isUrl) {
     var sub = new Ctx(value, ctx.baseUrl, ctx.src, {
-      book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+      book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page, vars: ctx.vars,
     });
     var t = String(rule).trim();
     // 以 `@` 开头的是取值后缀（如 `@text`），否则是选择器
@@ -1362,9 +1444,6 @@
     var legacy = legacyQuery(html, splitTop(body, ['@']));
     if (legacy.length > 0) {
       return legacy.map(function (n) { return n.outerHTML; });
-    }
-    if (typeof console !== 'undefined' && console.log) {
-      console.log('[DBG] bookList rule=' + body + ' htmlLen=' + (html ? html.length : 0) + ' qa=' + (nodes ? nodes.length : 'null') + ' legacy=' + legacy.length);
     }
     return [];
   }
@@ -1450,7 +1529,9 @@
 
   /** 逐条目求值时用的上下文：result 是条目本身，src 是它的文本形式 */
   function itemCtx(element, baseUrl, extra) {
-    var ctx = new Ctx(element, baseUrl, '', extra);
+    var ex = extra || {};
+    ex.vars = ex.vars || {};
+    var ctx = new Ctx(element, baseUrl, '', ex);
     ctx.src = typeof element === 'string' ? element : JSON.stringify(element);
     return ctx;
   }
@@ -1513,9 +1594,6 @@
       // 不是整个列表页 —— 于是 `@js: JSON.parse(src)` 拿到的是本条 JSON
       var item = itemCtx(elements[i], ctx.baseUrl, { key: key, page: page });
       var bookUrl = field(rules, 'bookUrl', item);
-      if (typeof console !== 'undefined' && console.log && i < 3) {
-        console.log('[DBG] item#' + i + ' bookUrl=' + JSON.stringify(bookUrl).slice(0, 120) + ' itemLen=' + (typeof elements[i] === 'string' ? elements[i].length : 'n/a'));
-      }
       if (bookUrl.length === 0) { continue; }
       bookUrl = absolute(ctx.baseUrl, bookUrl);
       var name = field(rules, 'name', item);
@@ -1531,6 +1609,8 @@
         status: field(rules, 'status', item),
         updateTime: field(rules, 'updateTime', item),
         bookUrl: bookUrl,
+        // 条目级 @put 变量（供 bookInfo/toc/content 的 @get:{book} 使用），避免多条目互相覆盖
+        _vars: item.vars ? item.vars : undefined,
       });
     }
     return out;
@@ -1583,7 +1663,7 @@
     var source = job.source;
     var book = job.book || {};
     var rules = source.ruleBookInfo || {};
-    var ctx = new Ctx('', String(book.bookUrl || ''), '', { book: book, fromBookInfo: true });
+    var ctx = new Ctx('', String(book.bookUrl || ''), '', { book: book, fromBookInfo: true, vars: (book && book._vars) || undefined });
     var url = String(book.bookUrl || '');
     var initRule = String(rules.init || '').trim();
     if (initRule.length > 0) {
@@ -1605,6 +1685,8 @@
       lastChapter: field(rules, 'lastChapter', ctx),
       updateTime: field(rules, 'updateTime', ctx),
       tocUrl: '',
+      // 透传条目级 @put 变量（toc 的 @get:{book} 依赖它）
+      _vars: (book && book._vars) || undefined,
     };
     var tocRule = String(rules.tocUrl || '').trim();
     if (tocRule.length > 0) {
@@ -1641,7 +1723,7 @@
 
     while (nextUrl && nextUrl.length > 0 && guard < TOC_PAGE_LIMIT) {
       guard++;
-      var ctx = new Ctx('', nextUrl, '', { book: book });
+      var ctx = new Ctx('', nextUrl, '', { book: book, vars: (book && book._vars) || undefined });
       var body = fetchTextFor(nextUrl, ctx);
       ctx.result = body;
       ctx.src = body;
@@ -1654,6 +1736,7 @@
         var name = field(rules, 'chapterName', item);
         var url = field(rules, 'chapterUrl', item);
         url = absolute(nextUrl, url);
+        url = cleanMark(url);
         if (name.length === 0 && url.length === 0) { continue; }
         var dedupe = url.length > 0 ? url : name;
         if (seen[dedupe]) { continue; }
@@ -1671,7 +1754,7 @@
       // 下一页
       var nextRule = String(rules.nextTocUrl || '').trim();
       if (nextRule.length === 0) { break; }
-      var ctx2 = new Ctx('', nextUrl, body, { book: book });
+      var ctx2 = new Ctx('', nextUrl, body, { book: book, vars: (book && book._vars) || undefined });
       var candidate = '';
       try {
         candidate = evalField(nextRule, ctx2, true);
@@ -1691,7 +1774,7 @@
     var chapter = job.chapter || {};
     var rules = source.ruleContent || {};
     var url = String(chapter.url || '');
-    var ctx = new Ctx('', url, '', { book: book, chapter: chapter });
+    var ctx = new Ctx('', url, '', { book: book, chapter: chapter, vars: (book && book._vars) || undefined });
     var body = fetchTextFor(url, ctx);
     ctx.result = body;
     ctx.src = body;
@@ -1712,16 +1795,23 @@
       if (value.length === 0) { continue; }
       var extracted = extractUrl(value);
       if (extracted.length > 0) {
-        found = absolute(url, extracted);
+        found = cleanMark(absolute(url, extracted));
         from = candidates[i][0];
       }
     }
     // ruleContent 整个为空（悦听 / 播客）：章节地址本身就是音频直链
     if (found.length === 0 && candidates.length === 0) {
       if (/\.(mp3|m4a|aac|wav|ogg|m3u8|flac)(\?|$)/i.test(url) || /^https?:/i.test(url)) {
-        found = url;
+        found = cleanMark(url);
         from = 'chapterUrl';
       }
+    }
+    // 音频直链校验：content 链路必须给出可播放的音频地址（mp3/m4a/aac 等）。
+    // 若规则只给出页面/API 地址（如恋听网等依赖 webView 执行 JS 的章节页），
+    // 直接置空交给 App 层提示，避免把 HTML 页交给 AVPlayer 报 CONTAINER_ERR。
+    if (found.length > 0 && !/\.(mp3|m4a|aac|wav|ogg|m3u8|flac)(\?|$)/i.test(found)) {
+      found = '';
+      from = from.length > 0 ? (from + ':not-audio') : 'not-audio';
     }
     return { url: found, from: from, title: field(rules, 'title', ctx) };
   }
