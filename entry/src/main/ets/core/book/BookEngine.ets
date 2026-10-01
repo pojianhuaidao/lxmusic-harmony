@@ -198,6 +198,20 @@ export class BookEngine {
     const searchUrl: string = sourceText(source, 'searchUrl');
     const exploreUrl: string = sourceText(source, 'exploreUrl');
     const loginUrl: string = source.loginUrl !== undefined && source.loginUrl !== null ? source.loginUrl : '';
+    // 只有「loginUrl 且带 login 规则」才算需要登录；喜马拉雅等把专辑页填进
+    // loginUrl 的源视为无需登录，避免出现「登录」入口却根本没有登录页。
+    const rawRec: Record<string, Object> = source as unknown as Record<string, Object>;
+    const loginRule: Object | undefined = rawRec['login'];
+    let hasLoginRule = false;
+    if (loginRule !== undefined && loginRule !== null) {
+      if (typeof loginRule === 'string') {
+        hasLoginRule = (loginRule as string).trim().length > 0;
+      } else {
+        const obj: Record<string, Object> = loginRule as Record<string, Object>;
+        const lu: Object | undefined = obj['url'];
+        hasLoginRule = lu !== undefined && lu !== null && String(lu).trim().length > 0;
+      }
+    }
     const candidate: BookSourceInfo = {
       id: '',
       name: name.length > 0 ? name : url,
@@ -207,7 +221,7 @@ export class BookEngine {
       type: source.bookSourceType !== undefined ? source.bookSourceType : 1,
       canSearch: searchUrl.length > 0,
       canExplore: exploreUrl.length > 0,
-      needLogin: loginUrl.length > 0,
+      needLogin: loginUrl.length > 0 && hasLoginRule,
       importedAt: Date.now(),
     };
     // 同「名字 + 站址」视为同一个源：已存在就原地覆盖，避免导入两次出现两条
@@ -539,6 +553,25 @@ export class BookEngine {
     }
   }
 
+  /** 书源是否声明了可执行的登录规则（login 对象且带 url） */
+  private hasLoginRule(sourceId: string): boolean {
+    try {
+      const source: Record<string, Object> = JSON.parse(this.rawOf(sourceId)) as Record<string, Object>;
+      const login: Object | undefined = source['login'];
+      if (login === undefined || login === null) {
+        return false;
+      }
+      if (typeof login === 'string') {
+        return (login as string).trim().length > 0;
+      }
+      const obj: Record<string, Object> = login as Record<string, Object>;
+      const url: Object | undefined = obj['url'];
+      return url !== undefined && url !== null && String(url).trim().length > 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** 这个书源是否已填过账号密码（会话内） */
   isLoggedIn(sourceId: string): boolean {
     return this.loginMap[sourceId] !== undefined;
@@ -562,7 +595,15 @@ export class BookEngine {
     }
     const loginUrl: string = this.loginUrlOf(sourceId);
     if (loginUrl.length === 0) {
-      return '该书源没有登录页（loginUrl 为空）';
+      // 无登录页的源不阻塞：记录账号密码（会话内）后返回「无需登录」标志，
+      // 由界面提示并关闭登录弹窗，听书/发现照常可用。
+      this.loginMap[sourceId] = { 'name': account, 'password': password };
+      return '无需登录';
+    }
+    // 有 loginUrl 但源没声明登录规则（如喜马拉雅把专辑页填进了 loginUrl）：同样不阻塞
+    if (!this.hasLoginRule(sourceId)) {
+      this.loginMap[sourceId] = { 'name': account, 'password': password };
+      return '无需登录';
     }
     this.loginMap[sourceId] = { 'name': account, 'password': password };
     try {

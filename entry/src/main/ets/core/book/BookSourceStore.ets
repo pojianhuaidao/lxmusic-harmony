@@ -163,6 +163,8 @@ export function sourceText(source: BookSource, key: string): string {
     value = source.searchUrl;
   } else if (key === 'exploreUrl') {
     value = source.exploreUrl;
+  } else if (key === 'loginUrl') {
+    value = source.loginUrl;
   }
   if (value === undefined || value === null) {
     return '';

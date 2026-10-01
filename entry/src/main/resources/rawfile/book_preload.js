@@ -382,12 +382,21 @@
       var c = path.charAt(i);
       if (c === '.') {
         i++;
+        // `..` 递归下降（`$..albums`）与 `.*` 通配（`$..albums.*`）
+        var recursive = false;
+        if (path.charAt(i) === '.') { recursive = true; i++; }
         var name = '';
         while (i < path.length && path.charAt(i) !== '.' && path.charAt(i) !== '[') {
           name += path.charAt(i);
           i++;
         }
-        if (name.length > 0) { tokens.push({ kind: 'key', value: name }); }
+        if (name === '*') {
+          tokens.push({ kind: 'all' });
+        } else if (recursive) {
+          if (name.length > 0) { tokens.push({ kind: 'recursive', value: name }); }
+        } else if (name.length > 0) {
+          tokens.push({ kind: 'key', value: name });
+        }
       } else if (c === '[') {
         var close = path.indexOf(']', i);
         if (close < 0) { break; }
@@ -405,6 +414,21 @@
         i++;
       }
     }
+    function collectRecursive(node, key, into) {
+      if (node === null || node === undefined) { return; }
+      if (typeof node === 'object') {
+        if (!Array.isArray(node) && Object.prototype.hasOwnProperty.call(node, key)) {
+          into.push(node[key]);
+        }
+        if (Array.isArray(node)) {
+          for (var a = 0; a < node.length; a++) { collectRecursive(node[a], key, into); }
+        } else {
+          for (var k in node) {
+            if (k !== key && typeof node[k] === 'object') { collectRecursive(node[k], key, into); }
+          }
+        }
+      }
+    }
     var nodes = [root];
     for (var t = 0; t < tokens.length; t++) {
       var token = tokens[t];
@@ -414,10 +438,12 @@
         if (node === null || node === undefined) { continue; }
         if (token.kind === 'all') {
           if (Array.isArray(node)) {
-            for (var a = 0; a < node.length; a++) { next.push(node[a]); }
+            for (var a2 = 0; a2 < node.length; a2++) { next.push(node[a2]); }
           } else if (typeof node === 'object') {
-            for (var k in node) { next.push(node[k]); }
+            for (var k2 in node) { next.push(node[k2]); }
           }
+        } else if (token.kind === 'recursive') {
+          collectRecursive(node, token.value, next);
         } else if (token.kind === 'index') {
           if (Array.isArray(node) || typeof node === 'string') {
             var idx = token.value < 0 ? node.length + token.value : token.value;
@@ -438,7 +464,18 @@
     for (var i = 0; i < nodes.length; i++) {
       var v = nodes[i];
       if (v === null || v === undefined) { continue; }
-      out.push(typeof v === 'string' ? v : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+      // legado 列表语义：路径末端命中数组时展开为元素列表（`$.data.albums`）
+      // 对象元素**原样保留**：下一级字段规则（`anchorName` / `coverPath` 等纯键名）
+      // 需要对象上下文按键取值；stringify 成字符串会让字段级规则误走 CSS 分支取空。
+      if (Array.isArray(v)) {
+        for (var a = 0; a < v.length; a++) {
+          var e = v[a];
+          if (e === null || e === undefined) { continue; }
+          out.push(e);
+        }
+        continue;
+      }
+      out.push(v);
     }
     return out;
   }
@@ -763,10 +800,10 @@
     }
   }
 
-  /** `{{ }}` 与 `@get:{...}` 替换 */
+  /** `{{ }}`、`{$.xx}` 与 `@get:{...}` 替换 */
   function makeUpRule(rule, ctx, jsOnly) {
     var text = String(rule || '');
-    if (text.indexOf('@get:') < 0 && text.indexOf('{{') < 0) { return text; }
+    if (text.indexOf('@get:') < 0 && text.indexOf('{{') < 0 && text.indexOf('{$.') < 0) { return text; }
     // @get:{key} -> 变量
     text = text.replace(/@get:\{([^}]*)\}/g, function (whole, name) {
       var key = String(name).trim();
@@ -797,6 +834,19 @@
         if (v === null || v === undefined) { return ''; }
         if (typeof v === 'number' && v % 1 === 0) { return String(Math.round(v)); }
         return String(v);
+      } catch (e) {
+        return '';
+      }
+    });
+    // legado 单花括号 JSONPath 字段模板 `{$.albumId}`（常见于 JSON API 源拼 URL）
+    text = text.replace(/\{\$([.[\w-]+)\}/g, function (whole, jp) {
+      try {
+        var rootJ = ctx.result;
+        if (typeof rootJ === 'string') {
+          try { rootJ = JSON.parse(rootJ); } catch (e) { rootJ = null; }
+        }
+        var val = jsonPathOne(rootJ, '$' + jp);
+        return val === null || val === undefined ? '' : String(val);
       } catch (e) {
         return '';
       }
@@ -927,10 +977,50 @@
     var result = ctx.result;
     // 对象 / 数组：按键取值
     if (result !== null && result !== undefined && typeof result === 'object') {
+      // 完整 URL / 纯文本模板（makeUpRule 已把 {$.xx} 等替换成真实值）：
+      // 对象场景下也要原样返回，不能当键名取（`result[URL]` 恒空 → 条目被跳过）
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(r) && r.indexOf('@') < 0) { return r; }
       if (Array.isArray(result)) {
         var idx = /^-?\d+$/.test(r) ? parseInt(r, 10) : -1;
         if (idx >= 0 && idx < result.length) { return String(result[idx]); }
         return '';
+      }
+      // legado `键名@js:代码`：先按键取字段值，再作为 result 执行 js 拼 URL
+      // （如喜马拉雅 link@js:"http://..." + result.split('/')[2] + '...'）
+      if (r.indexOf('@js:') >= 0) {
+        var jsSplit = r.split('@js:');
+        var jsKey = String(jsSplit[0]).trim();
+        var jsCode2 = jsSplit.slice(1).join('@js:').trim();
+        var jsBase = jsKey.length === 0 ? result : result[jsKey];
+        if (jsBase === undefined) { return ''; }
+        var subCtx = new Ctx(jsBase, ctx.baseUrl, '', {
+          book: ctx.book, chapter: ctx.chapter, key: ctx.key, page: ctx.page,
+        });
+        try {
+          var jsVal = runJS(jsCode2, subCtx);
+          return jsVal === null || jsVal === undefined ? '' : String(jsVal);
+        } catch (e) {
+          return '';
+        }
+      }
+      // legado `title@put:{book:albumId}`：先把 `@put:{key:value}` 存进 PUT_STORE，
+      // 再用剩余部分按键取值（书名取 title，albumId 存为 book 供 @get 使用）
+      if (r.indexOf('@put:') >= 0) {
+        var putPart = r.split('@put:')[1] || '';
+        var mPut = putPart.match(/\{([^:}]+)\s*:\s*([^}]+)\}/);
+        if (mPut) {
+          var pKey = mPut[1].trim();
+          var pValRule = mPut[2].trim();
+          var pVal = '';
+          if (pValRule.indexOf('$.') === 0) { pVal = jsonPathOne(result, pValRule); }
+          else { pVal = result[pValRule] === undefined ? '' : String(result[pValRule]); }
+          if (typeof PUT_STORE !== 'undefined') { PUT_STORE[pKey] = pVal; }
+          var prePut = r.split('@put:')[0].trim();
+          if (prePut.length === 0) { return pVal; }
+          var vPut = result[prePut];
+          if (vPut === undefined) { return ''; }
+          return typeof vPut === 'string' ? vPut : JSON.stringify(vPut);
+        }
       }
       var val = result[r];
       if (val === undefined) {
@@ -943,6 +1033,8 @@
       return result === null || result === undefined ? '' : String(result);
     }
     var html = result;
+    // 完整 URL / 纯文本模板（非选择器）：直接返回（legado 里 URL 规则字段拼好后原样输出）
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(r) && r.indexOf('@') < 0) { return r; }
     // 纯取值（`@text` 这种）直接用当前片段当根
     if (r.charAt(0) === '@') {
       var selfDoc = parseDoc(html);
@@ -1458,6 +1550,10 @@
       return v === null || v === undefined ? '' : String(v).trim();
     }
     var made = makeUpRule(text, ctx, jsOnly).trim();
+    // legado 分页模板 `url<,nextUrl>` 写法：当前页 URL 只取 `<` 之前部分，后段为第二页 {{page}} 阶梯模板
+    if (made.indexOf('<,') >= 0) {
+      made = made.split('<,')[0];
+    }
     // 搜索 / 发现地址允许写成相对路径（`/search.php?...`），用书源自己的站址补全
     if (made.length > 0 && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(made)) {
       made = absolute(String(lastSourceUrl() || (ctx && ctx.baseUrl) || ''), made);

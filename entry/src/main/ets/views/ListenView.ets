@@ -414,21 +414,33 @@ export struct ListenView {
     }
     this.loginBusy = true;
     this.loginStatus = '正在登录…';
+    let closeAfter: boolean = false;
     try {
       const msg: string = await BookEngine.getInstance().login(
         this.loginSourceId, this.loginName, this.loginPassword);
-      this.loginStatus = msg;
       if (msg === '登录成功') {
+        this.loginStatus = msg;
         this.refresh();
         // 发现页重新拉一次分类（登录态变了）
         if (this.exploreSourceId === this.loginSourceId) {
           this.loadExploreCategories();
         }
+        closeAfter = true;
+      } else if (msg === '无需登录') {
+        // 无登录页的源：不阻塞，关闭弹窗并提示可继续使用
+        this.loginStatus = '';
+        this.sourceStatus = '该源无需登录，可直接听书';
+        closeAfter = true;
+      } else {
+        this.loginStatus = msg;
       }
     } catch (e) {
       this.loginStatus = `登录失败：${(e as Error).message}`;
     } finally {
       this.loginBusy = false;
+      if (closeAfter) {
+        this.closeLogin();
+      }
     }
   }
 
