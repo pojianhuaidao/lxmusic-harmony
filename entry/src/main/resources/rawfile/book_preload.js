@@ -527,6 +527,11 @@
    * 每段是「类型.名称.位置」，类型 ∈ class / tag / id / text。
    */
   function legacyQuery(html, segments) {
+    function depthOf(node) {
+      var d = 0;
+      while (node && node.parentNode) { d++; node = node.parentNode; }
+      return d;
+    }
     var scope = [parseDoc(html).body];
     for (var s = 0; s < segments.length; s++) {
       var seg = String(segments[s]).trim();
@@ -584,6 +589,12 @@
           } else {
             arr.push(found[j]);
           }
+        }
+        // text 匹配要取「最内层」包含该文本的元素：祖先容器的 textContent 也会包含
+        // 目标文本（HTML/BODY/DIV 都含「查看全部章节」），按文档顺序取第一个会命中
+        // DIV 容器 → 再取 href 恒空 → tocUrl 求值空。深者优先即叶节点优先。
+        if (type === 'text' && name.length > 0 && arr.length > 1) {
+          arr.sort(function (x, y) { return depthOf(y) - depthOf(x); });
         }
         if (pos === null) {
           for (var k = 0; k < arr.length; k++) { next.push(arr[k]); }
@@ -1501,9 +1512,18 @@
     };
     var tocRule = String(rules.tocUrl || '').trim();
     if (tocRule.length > 0) {
-      var toc = makeUpRule(tocRule, ctx);
-      // `{{bookUrl}}` 这种模板已在 makeUpRule 里换掉；若算出来是空就用书本身地址
-      out.tocUrl = toc.trim().length > 0 ? absolute(url, toc.trim()) : url;
+      // tocUrl 是真正的规则串（`text.查看全部章节@href`、`class.x@tag.a@href`、
+      // `{{baseUrl}}/chapters?...`、`<js>` 等），必须走 evalField 完整求值。
+      // 此前只调 makeUpRule（仅做 {{}}/@get: 模板替换），会把选择器原样返回并
+      // absolute 成假 URL（如 …/book/text.查看全部章节@href）→ 目录页请求失败 → toc 空。
+      var toc = '';
+      try {
+        toc = evalField(tocRule, ctx, false);
+      } catch (e) {
+        toc = '';
+      }
+      toc = String(toc === null || toc === undefined ? '' : toc).trim();
+      out.tocUrl = toc.length > 0 ? absolute(url, toc) : url;
     } else {
       out.tocUrl = url;
     }
