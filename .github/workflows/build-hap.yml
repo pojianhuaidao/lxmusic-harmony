@@ -88,6 +88,33 @@ jobs:
           path: ${{ steps.rename.outputs.hap_path }}
           if-no-files-found: error
 
+      - name: Clean stale Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="latest"
+          KEEP="${{ steps.rename.outputs.hap_name }}"
+          # release 可能尚未创建过，容错跳过
+          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id' 2>/dev/null || true)
+          if [ -z "$RELEASE_ID" ]; then
+            echo "release tag ${TAG} not found, skip cleanup"
+            exit 0
+          fi
+          echo "release ${RELEASE_ID}, keep asset: ${KEEP}"
+          ASSETS=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq '.[] | "\(.id)\t\(.name)"')
+          if [ -z "$ASSETS" ]; then
+            echo "no assets, nothing to clean"
+            exit 0
+          fi
+          echo "$ASSETS" | while IFS=$'\t' read -r AID ANAME; do
+            if [ "$ANAME" != "$KEEP" ]; then
+              echo "deleting stale asset: ${ANAME} (${AID})"
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/releases/assets/${AID}" >/dev/null
+            else
+              echo "keeping asset: ${ANAME}"
+            fi
+          done
+
       - name: Publish HAP to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
