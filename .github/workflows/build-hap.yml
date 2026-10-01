@@ -61,13 +61,31 @@ jobs:
         run: |
           node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
 
+      - name: Rename HAP to <bundleName>-unsigned.hap
+        id: rename
+        run: |
+          set -euo pipefail
+          HAP=$(find entry/build -name '*.hap' | head -n 1)
+          if [ -z "$HAP" ]; then
+            echo "no .hap found in entry/build" >&2
+            exit 1
+          fi
+          BUNDLE=$(grep -o '"bundleName"[[:space:]]*:[[:space:]]*"[^"]*"' AppScope/app.json5 | head -n 1 | sed -E 's/.*"bundleName"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')
+          if [ -z "$BUNDLE" ]; then
+            echo "bundleName not found in AppScope/app.json5" >&2
+            exit 1
+          fi
+          DIR=$(dirname "$HAP")
+          mv "$HAP" "$DIR/${BUNDLE}-unsigned.hap"
+          echo "renamed $HAP -> $DIR/${BUNDLE}-unsigned.hap"
+          echo "hap_path=$DIR/${BUNDLE}-unsigned.hap" >> "$GITHUB_OUTPUT"
+          echo "hap_name=${BUNDLE}-unsigned.hap" >> "$GITHUB_OUTPUT"
+
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4
         with:
           name: lxmusic-harmony-hap
-          path: |
-            entry/build/default/outputs/**/*.hap
-            entry/build/**/outputs/**/*.hap
+          path: ${{ steps.rename.outputs.hap_path }}
           if-no-files-found: error
 
       - name: Publish HAP to GitHub Release
@@ -77,9 +95,7 @@ jobs:
           name: lxmusic-harmony 最新包 (${{ github.sha }})
           body: |
             自动构建产物，基于 commit ${{ github.sha }}。
-            手机端直接下载 entry-default-unsigned.hap 安装。
-          files: |
-            entry/build/default/outputs/**/*.hap
-            entry/build/**/outputs/**/*.hap
+            手机端直接下载 ${{ steps.rename.outputs.hap_name }} 安装。
+          files: ${{ steps.rename.outputs.hap_path }}
           fail_on_unmatched_files: true
           allowUpdates: true

@@ -14,9 +14,6 @@ const TAG: string = 'WebDavClient';
 const LIST_TIMEOUT_MS: number = 20000;
 /** 读远端标签的超时：只是取文件头，超过这个时间就当这台服务器不支持 */
 const TAG_TIMEOUT_MS: number = 12000;
-/** 递归收集时的上限，防止手滑选了「根目录」把整个网盘扫一遍 */
-const MAX_FOLDERS: number = 300;
-const MAX_AUDIO_ENTRIES: number = 5000;
 
 /** 递归收集的结果 */
 export interface WebDavCollectResult {
@@ -24,7 +21,8 @@ export interface WebDavCollectResult {
   entries: WebDavEntry[];
   /** 扫过的目录数 */
   folders: number;
-  /** 因为超过上限提前停了（界面要说明「只添加了一部分」） */
+  /** 扫描是否不完整。已解除数量/目录数上限，正常扫描不置位；
+   *  仅极端异常（目录大面积读取失败且一个条目都没拿到）时置位 */
   truncated: boolean;
   /** 没读成功的目录（权限不够 / 超时），界面提示用 */
   failedFolders: number;
@@ -102,8 +100,8 @@ export class WebDavClient {
   /**
    * 递归收集一个目录下的音频（含子目录）
    *
-   * 广度优先一层层走，每层都发一次 PROPFIND；目录数、条目数都有上限，
-   * 达到上限就停下并如实报告 `truncated`，不假装扫完了。
+   * 广度优先一层层走，每层都发一次 PROPFIND；不设目录数/条目数上限，
+   * 一直扫到整棵树遍历完为止（目录读取失败只计入 failedFolders）。
    *
    * @param maxDepth 目录层级上限（0 = 只看这一层）。`音乐/<歌手>/<专辑>/<歌>` 是 3 层
    */
@@ -116,10 +114,7 @@ export class WebDavClient {
     while (pending.length > 0) {
       const next: string[] = [];
       for (const folder of pending) {
-        if (visited.has(folder) || visited.size >= MAX_FOLDERS) {
-          if (visited.size >= MAX_FOLDERS) {
-            result.truncated = true;
-          }
+        if (visited.has(folder)) {
           continue;
         }
         visited.add(folder);
@@ -145,10 +140,6 @@ export class WebDavClient {
             continue;
           }
           result.entries.push(entry);
-          if (result.entries.length >= MAX_AUDIO_ENTRIES) {
-            result.truncated = true;
-            return result;
-          }
         }
       }
       if (next.length === 0) {
@@ -156,6 +147,10 @@ export class WebDavClient {
       }
       pending = next;
       depth++;
+    }
+    // 极端异常：目录大面积读取失败且一个条目都没拿到，结果必然不完整
+    if (result.failedFolders > 0 && result.entries.length === 0) {
+      result.truncated = true;
     }
     return result;
   }
