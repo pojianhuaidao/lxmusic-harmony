@@ -24,9 +24,6 @@ const ASSET_DIR: string = 'lx-builtin-user-api';
 /** 已注入音源 id 的记录文件（与 SourceStore 同目录 lx_sources/ 下） */
 const SEED_FILE: string = 'builtin_seed.json';
 
-// 内置音源注入上限（36 个用户音源集成后内置源约 29 个，20 不够，放宽到 40）
-const MAX_USER_API: number = 40;
-
 interface BuiltinSource {
   id: string;
   file: string;
@@ -249,11 +246,10 @@ export class SeedBuiltin {
     }
 
     // === 注入内置音源（与安卓版 seedBuiltin.ts 行为一致：同名项按「内置脚本 hash 优先」清理，再注入内置版） ===
-    const seededSet: Set<string> = new Set(this.seeded);
+    // 不依赖 builtin_seed.json 记录跳过注入：以 store 实际内容为准增量补齐缺失的内置源，
+    // 修复「升级覆盖安装后 App 看不到新集成内置音源」问题（旧逻辑 seeded 命中即 continue，
+    // 一旦 seeded 记录与实际 store 数据不一致或源数达到 MAX_USER_API，新源将永久缺失）。
     for (const item of BUILTIN_SOURCES) {
-      if (seededSet.has(item.id)) {
-        continue;
-      }
       try {
         const script: string = this.readRawScript(context, item.file);
         if (script.trim().length === 0) {
@@ -269,7 +265,7 @@ export class SeedBuiltin {
             continue;
           }
           if (this.scriptHashOf(engine, existing.id) === hash) {
-            // 已存在内容与内置资产一致的项（历史注入的内置版）：标记 seeded，不重复注入（防“幽灵音源”复活）
+            // 已存在内容与内置资产一致的项（历史注入的内置版 / 用户自建同内容项）：标记 seeded，不重复注入（防“幽灵音源”复活）
             alreadyBuiltin = true;
             continue;
           }
@@ -290,9 +286,7 @@ export class SeedBuiltin {
           this.markSeeded(item.id);
           continue;
         }
-        if (list.length >= MAX_USER_API) {
-          break;
-        }
+        // 本地缺失（升级不重种子 / seeded 记录与实际数据不一致 / store 数据丢失）：增量补齐内置版，不设数量上限
         // 存在同名项但内容与内置不一致（网络版）：删除后注入内置版（内置优先，与安卓一致）
         if (sameNameIds.length > 0) {
           engine.removeSources(sameNameIds);
