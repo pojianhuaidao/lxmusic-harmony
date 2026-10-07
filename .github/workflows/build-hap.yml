@@ -61,7 +61,7 @@ jobs:
         run: |
           node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
 
-      - name: Rename HAP to <bundleName>-unsigned.hap
+      - name: Rename HAP to <bundleName>-<versionName>-unsigned.hap
         id: rename
         run: |
           set -euo pipefail
@@ -71,15 +71,23 @@ jobs:
             exit 1
           fi
           BUNDLE=$(grep -o '"bundleName"[[:space:]]*:[[:space:]]*"[^"]*"' AppScope/app.json5 | head -n 1 | sed -E 's/.*"bundleName"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')
+          VERSION=$(grep -o '"versionName"[[:space:]]*:[[:space:]]*"[^"]*"' AppScope/app.json5 | head -n 1 | sed -E 's/.*"versionName"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')
           if [ -z "$BUNDLE" ]; then
             echo "bundleName not found in AppScope/app.json5" >&2
             exit 1
           fi
+          if [ -z "$VERSION" ]; then
+            echo "versionName not found in AppScope/app.json5" >&2
+            exit 1
+          fi
+          SHORT_SHA="${GITHUB_SHA:0:7}"
           DIR=$(dirname "$HAP")
-          mv "$HAP" "$DIR/${BUNDLE}-unsigned.hap"
-          echo "renamed $HAP -> $DIR/${BUNDLE}-unsigned.hap"
-          echo "hap_path=$DIR/${BUNDLE}-unsigned.hap" >> "$GITHUB_OUTPUT"
-          echo "hap_name=${BUNDLE}-unsigned.hap" >> "$GITHUB_OUTPUT"
+          mv "$HAP" "$DIR/${BUNDLE}-${VERSION}-unsigned.hap"
+          echo "renamed $HAP -> $DIR/${BUNDLE}-${VERSION}-unsigned.hap"
+          echo "hap_path=$DIR/${BUNDLE}-${VERSION}-unsigned.hap" >> "$GITHUB_OUTPUT"
+          echo "hap_name=${BUNDLE}-${VERSION}-unsigned.hap" >> "$GITHUB_OUTPUT"
+          echo "version_name=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Upload HAP artifact
         uses: actions/upload-artifact@v4
@@ -119,7 +127,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: lxmusic-harmony 最新包 (${{ github.sha }})
+          name: lxmusic-harmony ${{ steps.rename.outputs.version_name }} (${{ steps.rename.outputs.short_sha }})
           body: |
             自动构建产物，基于 commit ${{ github.sha }}。
             手机端直接下载 ${{ steps.rename.outputs.hap_name }} 安装。
