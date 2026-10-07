@@ -24,7 +24,8 @@ const ASSET_DIR: string = 'lx-builtin-user-api';
 /** 已注入音源 id 的记录文件（与 SourceStore 同目录 lx_sources/ 下） */
 const SEED_FILE: string = 'builtin_seed.json';
 
-const MAX_USER_API: number = 20;
+// 内置音源注入上限（36 个用户音源集成后内置源约 29 个，20 不够，放宽到 40）
+const MAX_USER_API: number = 40;
 
 interface BuiltinSource {
   id: string;
@@ -45,6 +46,30 @@ const BUILTIN_SOURCES: BuiltinSource[] = [
   { id: 'flower', file: 'flower.js', name: '野花🌷' },
   { id: 'grass', file: 'grass.js', name: '野草🌾' },
   { id: 'huibq', file: 'huibq.js', name: 'Huibq_lxmusic源' },
+  { id: 'kuwo', file: 'kuwo.js', name: 'KuwoDES' },
+  { id: 'kxh', file: 'kxh.js', name: 'K×H测试' },
+  { id: 'fish', file: 'fish.js', name: 'fish_music' },
+  { id: 'gdstudio', file: 'gdstudio.js', name: 'gdstudio音乐源' },
+  { id: 'ikun', file: 'ikun.js', name: 'ikun音源（中国香港服务器)' },
+  { id: 'monster', file: 'monster.js', name: 'monster' },
+  { id: 'cloud', file: 'cloud.js', name: '云端音源(免费版)' },
+  { id: 'qdoya', file: 'qdoya.js', name: '全豆要' },
+  { id: 'collect', file: 'collect.js', name: '收集の聚合接口(LX版)' },
+  { id: 'lxmusic', file: 'lxmusic.js', name: '洛雪音乐源' },
+  { id: 'xinghai', file: 'xinghai.js', name: '星海音乐源' },
+  { id: 'ynx', file: 'ynx.js', name: 'lx-玉宁熙-Pro' },
+  { id: 'yuxi', file: 'yuxi.js', name: '屿溪-终章' },
+  { id: 'changqing', file: 'changqing.js', name: '长青SVIP音源(二改修复版)' },
+  { id: 'jiexiang', file: 'jiexiang.js', name: '杰翔聚合音源' },
+  { id: 'molan', file: 'molan.js', name: '墨澜聚合音源' },
+  { id: 'hyw', file: 'hyw.js', name: 'HYWmusic_beta_公益测试' },
+  { id: 'juhe', file: 'juhe.js', name: '聚合API接口 (CF)' },
+  { id: 'juheapi', file: 'juheapi.js', name: '聚合API接口' },
+  { id: 'hires', file: 'hires.js', name: '聚合Hi-Res音乐音源v1.0' },
+  { id: 'suyin', file: 'suyin.js', name: '溯音音源' },
+  { id: 'wuming', file: 'wuming.js', name: '無名' },
+  { id: 'lx', file: 'lx.js', name: '独家音源' },
+  { id: 'stable', file: 'stable.js', name: '稳定版音源 v1.0.3' },
 ];
 
 /**
@@ -53,9 +78,8 @@ const BUILTIN_SOURCES: BuiltinSource[] = [
  * 故启动时按「id 精确匹配」或「脚本内容 hash 匹配」或「name 匹配」清理残留，不误删用户自建源。
  */
 const REMOVED_SOURCES: RemovedSource[] = [
-  { id: 'juhe', name: '聚合API接口 (CF)', hash: '6f788e66' },
-  { id: 'ikun', name: 'ikun音源', hash: '45c5e159' },
-  { id: 'lx', name: '[独家音源]', hash: 'b17362ad' },
+  // 2026-10-07 用户重新提供 ikun / juhe(聚合API接口 CF) / lx(独家音源) 新版文件，
+  // 已从下线名单移除并在 BUILTIN_SOURCES 重新启用；后续再下线时在此追加条目。
 ];
 
 /**
