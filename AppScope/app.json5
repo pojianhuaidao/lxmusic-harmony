@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "com.example.listen",
     "vendor": "example",
-    "versionCode": 1000004,
-    "versionName": "1.1007.04",
+    "versionCode": 1000005,
+    "versionName": "1.1007.05",
     "buildVersion": "1",
     "icon": "$media:layered_image",
     "label": "$string:app_name"

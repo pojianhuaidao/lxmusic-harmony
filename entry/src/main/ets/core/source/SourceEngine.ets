@@ -256,11 +256,25 @@ export class SourceEngine {
 
   // ------------------------------------------------------------ 导入 / 管理
 
-  /** 导入源脚本正文 */
+  /** 导入源脚本正文（用户手动导入入口：要求引擎已 prepare） */
   importSource(script: string): SourceInfo {
     if (!this.prepared) {
       throw new Error('SourceEngine 未初始化，请先调用 prepare(context)');
     }
+    return this.doImport(script);
+  }
+
+  /**
+   * 内置音源注入专用（SeedBuiltin.seed 由 prepare 在 prepared=true 之前调用，
+   * importSource 的 prepared 检查会拦截所有内置源，导致真机"内置音源归零"）。
+   * 不检查 prepared，前置防御由 prepare() 的 `if (this.store.isReady())` 承担。
+   */
+  injectBuiltin(script: string): SourceInfo {
+    return this.doImport(script);
+  }
+
+  /** 导入核心逻辑（无 prepared 前置，供 importSource / injectBuiltin 共用） */
+  private doImport(script: string): SourceInfo {
     if (script.length > MAX_SCRIPT_SIZE) {
       throw new Error('源脚本过大（超过 9MB）');
     }

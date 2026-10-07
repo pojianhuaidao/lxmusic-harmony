@@ -14,6 +14,8 @@ interface SeedEngine {
   isPrepared(): boolean;
   listSources(): SourceInfo[];
   importSource(script: string): SourceInfo;
+  /** 内置注入专用：不检查 prepared（seed 在 prepare 收尾置 true 之前调用） */
+  injectBuiltin(script: string): SourceInfo;
   hasScript(id: string): boolean;
   getScript(id: string): string;
   removeSources(ids: string[]): SourceInfo[];
@@ -301,7 +303,7 @@ export class SeedBuiltin {
           }
           hilog.info(DOMAIN, TAG, 'replaced %{public}d network source(s) with builtin %{public}s', sameNameIds.length, item.id);
         }
-        const info: SourceInfo = engine.importSource(script);
+        const info: SourceInfo = engine.injectBuiltin(script);
         list.push(info);
         this.markSeeded(item.id);
         hilog.info(DOMAIN, TAG, 'seeded builtin source: %{public}s', item.id);
