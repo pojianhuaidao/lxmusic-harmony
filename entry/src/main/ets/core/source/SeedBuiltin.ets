@@ -211,11 +211,14 @@ export class SeedBuiltin {
 
   /**
    * 启动时注入内置音源（同步）。调用方：SourceEngine.prepare()
+   *
+   * 注意：seed() 由 prepare() 在 this.prepared 置 true 之前调用（prepare 先
+   * store.init -> seed -> 收尾才 prepared=true），因此此处严禁用 engine.isPrepared()
+   * 做前置拦截——isPrepared() 在该时序下恒为 false，会导致 seed() 每次启动都直接
+   * return、内置音源永不注入（真机侧“升级后仍只有一个音源”的根因）。注入所需的前置
+   * 防御已由调用方 `if (this.store.isReady())` 与 store.list() 的 ready 检查承担。
    */
   seed(context: common.Context, engine: SeedEngine): void {
-    if (!engine.isPrepared()) {
-      return;
-    }
     this.loadSeeded(context);
 
     const list: SourceInfo[] = engine.listSources();
