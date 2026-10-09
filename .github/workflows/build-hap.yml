@@ -113,25 +113,12 @@ jobs:
               -keystoreFile key/lxmusic.p12 -keystorePwd "$LXMUSIC_KEY_PASS" \
               -signAlg SHA256withECDSA \
               -inFile "$HAP" -outFile "dist/${SIGNED}"
-            python3 - "$SIGNED" "$APP" <<'PY'
-import sys, zipfile
-signed, app = sys.argv[1], sys.argv[2]
-with zipfile.ZipFile("dist/" + app, "w", zipfile.ZIP_DEFLATED) as z:
-    z.write("dist/" + signed, "entry-default-signed.hap")
-    z.write("entry/build/default/outputs/default/pack.info", "pack.info")
-PY
+            python3 tools/ci/assemble_bundle.py assemble-app "dist/${SIGNED}" "dist/${APP}"
             echo "signed app built"
           else
             echo "secrets.LXMUSIC_KEY_B64 not configured -> skip signing"
           fi
-          python3 - "$UNSIGNED" "$APP" "$ZIP" <<'PY'
-import sys, os, zipfile
-unsigned, app, zipname = sys.argv[1], sys.argv[2], sys.argv[3]
-with zipfile.ZipFile("dist/" + zipname, "w", zipfile.ZIP_DEFLATED) as z:
-    z.write("dist/" + unsigned, unsigned)
-    if os.path.exists("dist/" + app):
-        z.write("dist/" + app, app)
-PY
+          python3 tools/ci/assemble_bundle.py bundle-zip "dist/${UNSIGNED}" "dist/${APP}" "dist/${ZIP}"
           ls -la dist/
           echo "zip_path=dist/${ZIP}" >> "$GITHUB_OUTPUT"
           echo "zip_name=${ZIP}" >> "$GITHUB_OUTPUT"
