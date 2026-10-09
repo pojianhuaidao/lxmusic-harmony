@@ -1,4 +1,4 @@
-name: Build HAP
+name: Build & Release (HAP + APP zip)
 
 on:
   push:
@@ -45,55 +45,102 @@ jobs:
           npm config set @ohos:registry=https://repo.harmonyos.com/npm/
           npm install --no-save @ohos/hvigor@latest @ohos/hvigor-ohos-plugin@latest
 
-      - name: Inspect SDK layout
-        env:
-          DEVECO_SDK_HOME: ${{ env.HOS_SDK_HOME }}
-        run: |
-          echo "HOS_SDK_HOME=$HOS_SDK_HOME"
-          echo "DEVECO_SDK_HOME=$DEVECO_SDK_HOME"
-          ls -la "$DEVECO_SDK_HOME"
-          cat "$DEVECO_SDK_HOME/default/sdk-pkg.json" 2>/dev/null | head -20
-          find "$DEVECO_SDK_HOME" -maxdepth 2 -type d | head -40
-
       - name: Build HAP
         env:
           DEVECO_SDK_HOME: ${{ env.HOS_SDK_HOME }}
         run: |
           node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
 
-      - name: Rename HAP to <bundleName>-<versionName>-unsigned.hap
-        id: rename
+      - name: Restore signing key from secrets
+        env:
+          LXMUSIC_KEY_B64: ${{ secrets.LXMUSIC_KEY_B64 }}
         run: |
           set -euo pipefail
-          HAP=$(find entry/build -name '*.hap' | head -n 1)
+          if [ -z "$LXMUSIC_KEY_B64" ]; then
+            echo "secrets.LXMUSIC_KEY_B64 not configured -> unsigned only" >&2
+            exit 0
+          fi
+          echo "$LXMUSIC_KEY_B64" | base64 -d > /tmp/lxmusic_key.zip
+          mkdir -p key
+          (cd key && unzip -o -q /tmp/lxmusic_key.zip)
+          ls -la key/
+
+      - name: Locate unsigned HAP & read version
+        id: meta
+        run: |
+          set -euo pipefail
+          HAP=$(find entry/build -name '*unsigned.hap' | head -n 1)
           if [ -z "$HAP" ]; then
-            echo "no .hap found in entry/build" >&2
+            HAP=$(find entry/build -name '*.hap' ! -name '*-signed.hap' | head -n 1)
+          fi
+          if [ -z "$HAP" ]; then
+            echo "no unsigned hap found" >&2
             exit 1
           fi
-          BUNDLE=$(grep -o '"bundleName"[[:space:]]*:[[:space:]]*"[^"]*"' AppScope/app.json5 | head -n 1 | sed -E 's/.*"bundleName"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')
           VERSION=$(grep -o '"versionName"[[:space:]]*:[[:space:]]*"[^"]*"' AppScope/app.json5 | head -n 1 | sed -E 's/.*"versionName"[[:space:]]*:[[:space:]]*"([^"]*)"/\1/')
-          if [ -z "$BUNDLE" ]; then
-            echo "bundleName not found in AppScope/app.json5" >&2
-            exit 1
-          fi
           if [ -z "$VERSION" ]; then
-            echo "versionName not found in AppScope/app.json5" >&2
+            echo "versionName not found" >&2
             exit 1
           fi
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          DIR=$(dirname "$HAP")
-          mv "$HAP" "$DIR/${BUNDLE}-${VERSION}-unsigned.hap"
-          echo "renamed $HAP -> $DIR/${BUNDLE}-${VERSION}-unsigned.hap"
-          echo "hap_path=$DIR/${BUNDLE}-${VERSION}-unsigned.hap" >> "$GITHUB_OUTPUT"
-          echo "hap_name=${BUNDLE}-${VERSION}-unsigned.hap" >> "$GITHUB_OUTPUT"
-          echo "version_name=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "hap_path=$HAP" >> "$GITHUB_OUTPUT"
+          echo "version_name=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
 
-      - name: Upload HAP artifact
+      - name: Sign HAP & assemble APP & bundle zip
+        id: bundle
+        env:
+          LXMUSIC_KEY_PASS: ${{ secrets.LXMUSIC_KEY_PASS }}
+          HAS_KEY: ${{ secrets.LXMUSIC_KEY_B64 != '' }}
+        run: |
+          set -euo pipefail
+          HAP="${{ steps.meta.outputs.hap_path }}"
+          VER="${{ steps.meta.outputs.version_name }}"
+          SHORT="${{ steps.meta.outputs.short_sha }}"
+          UNSIGNED="lxmusic_${VER}_unsigned.hap"
+          SIGNED="lxmusic_${VER}_signed.hap"
+          APP="lxmusic_${VER}_release.app"
+          ZIP="lxmusic_${VER}_${SHORT}_release.zip"
+          mkdir -p dist
+          cp "$HAP" "dist/${UNSIGNED}"
+          if [ "$HAS_KEY" = "true" ]; then
+            CERT=$(ls key/*.cer | head -n1)
+            PROFILE=$(ls key/*.p7b | head -n1)
+            java -jar tools/sign/hap-sign-tool.jar sign-app \
+              -mode localSign \
+              -keyAlias lxmusic -keyPwd "$LXMUSIC_KEY_PASS" \
+              -appCertFile "$CERT" -profileFile "$PROFILE" \
+              -keystoreFile key/lxmusic.p12 -keystorePwd "$LXMUSIC_KEY_PASS" \
+              -signAlg SHA256withECDSA \
+              -inFile "$HAP" -outFile "dist/${SIGNED}"
+            python3 - "$SIGNED" "$APP" <<'PY'
+import sys, zipfile
+signed, app = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile("dist/" + app, "w", zipfile.ZIP_DEFLATED) as z:
+    z.write("dist/" + signed, "entry-default-signed.hap")
+    z.write("entry/build/default/outputs/default/pack.info", "pack.info")
+PY
+            echo "signed app built"
+          else
+            echo "secrets.LXMUSIC_KEY_B64 not configured -> skip signing"
+          fi
+          python3 - "$UNSIGNED" "$APP" "$ZIP" <<'PY'
+import sys, os, zipfile
+unsigned, app, zipname = sys.argv[1], sys.argv[2], sys.argv[3]
+with zipfile.ZipFile("dist/" + zipname, "w", zipfile.ZIP_DEFLATED) as z:
+    z.write("dist/" + unsigned, unsigned)
+    if os.path.exists("dist/" + app):
+        z.write("dist/" + app, app)
+PY
+          ls -la dist/
+          echo "zip_path=dist/${ZIP}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lxmusic-harmony-hap
-          path: ${{ steps.rename.outputs.hap_path }}
+          name: lxmusic-harmony-release
+          path: ${{ steps.bundle.outputs.zip_path }}
           if-no-files-found: error
 
       - name: Clean stale Release assets
@@ -101,8 +148,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="latest"
-          KEEP="${{ steps.rename.outputs.hap_name }}"
-          # release 可能尚未创建过，容错跳过
+          KEEP="${{ steps.bundle.outputs.zip_name }}"
           RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.id' 2>/dev/null || true)
           if [ -z "$RELEASE_ID" ]; then
             echo "release tag ${TAG} not found, skip cleanup"
@@ -123,14 +169,19 @@ jobs:
             fi
           done
 
-      - name: Publish HAP to GitHub Release
+      - name: Publish zip to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: lxmusic-harmony ${{ steps.rename.outputs.version_name }} (${{ steps.rename.outputs.short_sha }})
+          name: lxmusic-harmony ${{ steps.meta.outputs.version_name }} (${{ steps.meta.outputs.short_sha }})
           body: |
             自动构建产物，基于 commit ${{ github.sha }}。
-            手机端直接下载 ${{ steps.rename.outputs.hap_name }} 安装。
-          files: ${{ steps.rename.outputs.hap_path }}
+
+            压缩包内包含两个版本：
+            - **lxmusic_${{ steps.meta.outputs.version_name }}_unsigned.hap**：未签名 HAP，侧载/自装用
+            - **lxmusic_${{ steps.meta.outputs.version_name }}_release.app**：已签名 APP，AGC 测试分发用（AGC 仅支持 app，不支持 hap）
+
+            下载 zip 解压后，按需使用对应文件。
+          files: ${{ steps.bundle.outputs.zip_path }}
           fail_on_unmatched_files: true
           allowUpdates: true
