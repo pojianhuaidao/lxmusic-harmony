@@ -111,7 +111,10 @@ java -jar $SignJar sign-app `
     -inFile $inHap -outFile $signedHap
 
 # ---- 8. assemble .app (zip: entry-default-signed.hap + pack.info) ----
-Write-Host "==> assembling APP -> $appOut"
+# 8.1 先组装裸 zip（无外层签名），再对 .app 执行 sign-app 外层签名。
+#     AGC 测试分发校验的是 .app 级别签名块，只签 HAP 不够。
+$appRaw = Join-Path $OutDir "lxmusic_${ver}_app_raw.app"
+Write-Host "==> assembling raw APP -> $appRaw"
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.IO.Compression
 function Add-ZipEntry($zip, $srcPath, $entryName) {
@@ -124,7 +127,7 @@ function Add-ZipEntry($zip, $srcPath, $entryName) {
         $stream.Close()
     }
 }
-$fs = [System.IO.File]::Open($appOut, [System.IO.FileMode]::Create)
+$fs = [System.IO.File]::Open($appRaw, [System.IO.FileMode]::Create)
 $zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
     Add-ZipEntry $zip $signedHap "entry-default-signed.hap"
@@ -133,7 +136,19 @@ try {
     $zip.Dispose()
     $fs.Dispose()
 }
-Write-Host "==> APP size: $((Get-Item $appOut).Length)B"
+Write-Host "==> raw APP size: $((Get-Item $appRaw).Length)B"
+
+# 8.2 对 .app 做外层签名（sign-app 同样适用 app 整包）
+Write-Host "==> outer-signing APP -> $appOut"
+java -jar $SignJar sign-app `
+    -mode localSign `
+    -keyAlias $alias -keyPwd $pass `
+    -appCertFile $cer -profileFile $p7b `
+    -keystoreFile $p12 -keystorePwd $pass `
+    -signAlg "SHA256withECDSA" `
+    -inFile $appRaw -outFile $appOut
+Remove-Item $appRaw -Force
+Write-Host "==> signed APP size: $((Get-Item $appOut).Length)B"
 
 # ---- 9. package zip (unsigned HAP + signed APP) ----
 Write-Host "==> packaging zip -> $zipOut"

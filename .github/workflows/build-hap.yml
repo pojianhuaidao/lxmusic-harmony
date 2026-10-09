@@ -113,7 +113,15 @@ jobs:
               -keystoreFile key/lxmusic.p12 -keystorePwd "$LXMUSIC_KEY_PASS" \
               -signAlg SHA256withECDSA \
               -inFile "$HAP" -outFile "dist/${SIGNED}"
-            python3 tools/ci/assemble_bundle.py assemble-app "dist/${SIGNED}" "dist/${APP}"
+            python3 tools/ci/assemble_bundle.py assemble-app "dist/${SIGNED}" "dist/${APP}_raw.app"
+            java -jar tools/sign/hap-sign-tool.jar sign-app \
+              -mode localSign \
+              -keyAlias lxmusic -keyPwd "$LXMUSIC_KEY_PASS" \
+              -appCertFile "$CERT" -profileFile "$PROFILE" \
+              -keystoreFile key/lxmusic.p12 -keystorePwd "$LXMUSIC_KEY_PASS" \
+              -signAlg SHA256withECDSA \
+              -inFile "dist/${APP}_raw.app" -outFile "dist/${APP}"
+            rm -f "dist/${APP}_raw.app"
             echo "signed app built"
           else
             echo "secrets.LXMUSIC_KEY_B64 not configured -> skip signing"
