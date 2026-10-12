@@ -120,6 +120,19 @@ function boardColors(index: number): string[] {
   return BOARD_COLORS[index % BOARD_COLORS.length];
 }
 
+/** 空条目哨兵：数据源刷新期间框架可能按旧 totalCount 请求越界索引，返回空条目避免渲染 undefined */
+const EMPTY_PLAYLIST_ITEM: LxPlaylistItem = {
+  id: '',
+  name: '',
+  author: '',
+  img: '',
+  desc: '',
+  playCount: '',
+  total: 0,
+  time: '',
+  source: '',
+};
+
 /** 推荐歌单列表的懒加载数据源（一页 30 条、可继续上拉，用 LazyForEach 更稳） */
 class PlaylistSource implements IDataSource {
   private items: LxPlaylistItem[] = [];
@@ -137,6 +150,10 @@ class PlaylistSource implements IDataSource {
   }
 
   getData(index: number): LxPlaylistItem {
+    if (index < 0 || index >= this.items.length) {
+      // 数据源刷新（setItems -> onDataReloaded）期间框架可能按旧 totalCount 请求旧索引
+      return EMPTY_PLAYLIST_ITEM;
+    }
     return this.items[index];
   }
 
@@ -495,6 +512,7 @@ export struct RecommendView {
                 }, (board: LxBoardItem) => board.id)
               }
               .scrollBar(BarState.Off)
+              .edgeEffect(EdgeEffect.Spring)
               .listDirection(Axis.Horizontal)
               .width('100%')
               .height(212)
@@ -550,9 +568,13 @@ export struct RecommendView {
               ListItem() {
                 // 行与行之间不画分隔线：封面 + 两行字自己就能分开，多一条浅色横线
                 // 在浅灰底上反而像一条白缝
-                this.playlistRow(item)
+                this.playlistRow((item === undefined || item === null) ? EMPTY_PLAYLIST_ITEM : item)
               }
-            }, (item: LxPlaylistItem) => `${item.id}_${item.name}`)
+            }, (item: LxPlaylistItem) => {
+              // key 生成器同样可能收到已失效的 item，落到哨兵上防 undefined 访问
+              const safe: LxPlaylistItem = (item === undefined || item === null) ? EMPTY_PLAYLIST_ITEM : item;
+              return `${safe.id}_${safe.name}`;
+            })
 
             if (this.error.length > 0) {
               ListItem() {
@@ -590,6 +612,7 @@ export struct RecommendView {
           }
         }
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
         .width('100%')
         .height('100%')
         /**

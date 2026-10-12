@@ -6,7 +6,7 @@ import { platformName } from '../core/music/MusicList';
 import { C_DIVIDER, C_RED, C_TEXT, C_TEXT_WEAK, F_ITEM, F_SUB, platformColor, platformTint } from '../ui/Theme';
 import { I_CHECK_CIRCLE, I_CIRCLE, I_MORE_CIRCLE, IconGlyph } from '../ui/Icons';
 import { CoverArt, EmptyState, FavoriteHeart } from '../ui/Widgets';
-import { SongListSource } from '../ui/SongListSource';
+import { EMPTY_SONG_ITEM, SongListSource } from '../ui/SongListSource';
 import { AddToPlaylistSheet } from './AddToPlaylistSheet';
 import { DownloadItem, DownloadManager, downloadKeyOf } from '../core/download/DownloadManager';
 import { isLocalSong } from '../core/local/LocalMusic';
@@ -245,6 +245,8 @@ export struct SongListPane {
   /** 一行的内容（封面 / 歌名歌手 / 行尾）—— 多选与非多选两种外壳共用它 */
   @Builder
   songRowContent(item: SongItem, index: number) {
+    // 注意：@Builder 内不允许写局部变量等非 UI 语句，哨兵兜底由
+    // LazyForEach itemGen 在调用本方法前完成（见 build()），这里的 item 已保证非空。
     CoverArt({
       url: CoverStore.getInstance().coverFor(item.musicInfoJson, item.coverUrl),
       name: item.name,
@@ -317,43 +319,48 @@ export struct SongListPane {
       } else {
         List() {
           LazyForEach(this.source, (item: SongItem, index: number) => {
+            // 数据源刷新（setItems -> onDataReloaded）期间可能回调到已失效的 item，
+            // 在调用处用三元表达式落到哨兵空条目上（itemGen 属 UI 构建上下文，不能写局部变量）。
             ListItem() {
               Column() {
                 if (this.selectable) {
                   // 我的页的列表：长按进多选（右键菜单还在行尾「更多」上，没丢）
                   Row({ space: 8 }) {
-                    this.songRowContent(item, index)
+                    this.songRowContent((item === undefined || item === null) ? EMPTY_SONG_ITEM : item, index)
                   }
                   .width('100%')
                   .height(this.coverSize + 22)
                   .padding({ left: 16, right: 14 })
                   .onClick(() => {
+                    const safe: SongItem = (item === undefined || item === null) ? EMPTY_SONG_ITEM : item;
                     if (this.selecting) {
-                      this.onToggleSelect(item);
+                      this.onToggleSelect(safe);
                       return;
                     }
                     this.onPick(index);
                   })
                   .gesture(LongPressGesture().onAction(() => {
                     if (!this.selecting) {
-                      this.onRequestSelect(item, index);
+                      const safe: SongItem = (item === undefined || item === null) ? EMPTY_SONG_ITEM : item;
+                      this.onRequestSelect(safe, index);
                     }
                   }))
                 } else {
                   Row({ space: 8 }) {
-                    this.songRowContent(item, index)
+                    this.songRowContent((item === undefined || item === null) ? EMPTY_SONG_ITEM : item, index)
                   }
                   .width('100%')
                   .height(this.coverSize + 22)
                   .padding({ left: 16, right: 14 })
                   .onClick(() => {
+                    const safe: SongItem = (item === undefined || item === null) ? EMPTY_SONG_ITEM : item;
                     if (this.selecting) {
-                      this.onToggleSelect(item);
+                      this.onToggleSelect(safe);
                       return;
                     }
                     this.onPick(index);
                   })
-                  .bindContextMenu(this.rowMenu(item, index), ResponseType.LongPress)
+                  .bindContextMenu(this.rowMenu((item === undefined || item === null) ? EMPTY_SONG_ITEM : item, index), ResponseType.LongPress)
                 }
 
                 Divider()
@@ -363,11 +370,16 @@ export struct SongListPane {
               }
               .width('100%')
             }
-          }, (item: SongItem, index: number) => `${index}_${item.id}`)
+          }, (item: SongItem, index: number) => {
+            // key 生成器同样可能收到已失效的 item，落到哨兵上防 undefined 访问
+            const safe: SongItem = (item === undefined || item === null) ? EMPTY_SONG_ITEM : item;
+            return `${index}_${safe.id}`;
+          })
         }
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
         // 底部留出悬浮页签栏 / 手势条的位置，最后一行能滚到它上面
         .padding({ bottom: this.bottomInset })
         // 多缓存几屏，快速滑动时不至于白屏

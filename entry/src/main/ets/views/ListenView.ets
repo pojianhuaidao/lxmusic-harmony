@@ -574,6 +574,7 @@ export struct ListenView {
       .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 84, endMargin: 0 })
     }
   }
@@ -670,6 +671,7 @@ export struct ListenView {
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
         .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 84, endMargin: 0 })
       }
     }
@@ -823,6 +825,7 @@ export struct ListenView {
           .width('100%')
           .layoutWeight(1)
           .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
           .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 16, endMargin: 0 })
         }
       } else {
@@ -893,6 +896,7 @@ export struct ListenView {
           .width('100%')
           .layoutWeight(1)
           .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
           .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 84, endMargin: 0 })
         }
       }
@@ -1044,6 +1048,7 @@ export struct ListenView {
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
         .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 16, endMargin: 0 })
       }
     }

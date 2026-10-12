@@ -200,6 +200,7 @@ export struct LyricMatchSheet {
         }, (item: Candidate) => `${item.source}_${item.info.songmid}_${item.info.name}`)
       }
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .width('100%')
       .margin({ top: 6 })

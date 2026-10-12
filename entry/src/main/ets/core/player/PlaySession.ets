@@ -229,13 +229,13 @@ export function songFromSearch(info: LxMusicInfo, quality: string): SongItem {
   }
   return {
     id: songmid.length > 0 ? musicIdOf(info) : `search_${itemSeq}`,
-    name: info.name,
-    singer: info.singer,
-    coverUrl: info.img,
+    name: info.name ?? '',
+    singer: info.singer ?? '',
+    coverUrl: info.img ?? '',
     art: false,
-    source: info.source,
+    source: info.source ?? '',
     quality: quality,
-    interval: info.interval,
+    interval: info.interval ?? '',
     musicInfoJson: json,
   };
 }

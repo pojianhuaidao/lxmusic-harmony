@@ -5,7 +5,7 @@ import { SyncManager } from '../core/sync/SyncManager';
 import { C_DIVIDER, C_RED, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_SUB } from '../ui/Theme';
 import { I_QUEUE, I_TRASH, I_VOLUME, IconGlyph } from '../ui/Icons';
 import { CoverArt, EmptyState } from '../ui/Widgets';
-import { SongListSource } from '../ui/SongListSource';
+import { SongListSource, EMPTY_SONG_ITEM } from '../ui/SongListSource';
 import { dustBus, DustPoint, dustPointOf } from '../ui/Dust';
 import { DownloadItem, DownloadManager, downloadKeyOf } from '../core/download/DownloadManager';
 import { isLocalSong } from '../core/local/LocalMusic';
@@ -221,7 +221,8 @@ export struct PlayQueueContent {
           ListItemGroup({ style: ListItemGroupStyle.CARD }) {
             LazyForEach(this.source, (item: SongItem, index: number) => {
               ListItem() {
-                this.songRow(item, index)
+                // 数据源刷新（队列替换）期间可能回调到已失效的 item，落到哨兵空条目上
+                this.songRow((item === undefined || item === null) ? EMPTY_SONG_ITEM : item, index)
               }
               .swipeAction({
                 end: {
@@ -233,7 +234,11 @@ export struct PlayQueueContent {
                   },
                 },
               })
-            }, (item: SongItem, index: number) => `${index}_${item.id}`)
+            }, (item: SongItem, index: number) => {
+              // key 生成器同样可能收到已失效的 item，落到哨兵上防 undefined 访问
+              const safe: SongItem = (item === undefined || item === null) ? EMPTY_SONG_ITEM : item;
+              return `${index}_${safe.id}`;
+            })
           }
           .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 72 })
         }
@@ -241,6 +246,7 @@ export struct PlayQueueContent {
         .layoutWeight(1)
         .padding({ left: 16, right: 16 })
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
       }
 
       Column().height(this.bottomInset + 8).width('100%')

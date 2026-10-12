@@ -346,6 +346,7 @@ export struct CommentSheet {
         }
       }
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .width('100%')
       .layoutWeight(1)
       .padding({ left: 16, right: 16 })
