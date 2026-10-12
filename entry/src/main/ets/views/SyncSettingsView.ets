@@ -405,6 +405,7 @@ export struct SyncSettingsView {
         .padding({ left: 16, right: 16, top: 8, bottom: this.bottomInset + 16 })
       }
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .align(Alignment.Top)
     }

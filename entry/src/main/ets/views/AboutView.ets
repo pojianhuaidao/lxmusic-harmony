@@ -264,6 +264,7 @@ export struct AboutView {
       .width('100%')
       .height(260)
       .scrollBar(BarState.Auto)
+      .edgeEffect(EdgeEffect.Spring)
       .align(Alignment.Top)
 
       Text(`共 ${AppLog.count()} 条 · 内存环形日志（最多 200 条，重启即清空）`)
@@ -295,6 +296,7 @@ export struct AboutView {
         .padding({ left: 16, right: 16, top: 8, bottom: this.bottomInset + 20 })
       }
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .align(Alignment.Top)
     }

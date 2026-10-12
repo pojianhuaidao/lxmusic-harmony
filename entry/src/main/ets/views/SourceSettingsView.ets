@@ -386,6 +386,7 @@ export struct SourceSettingsView {
         .padding({ left: 16, right: 16, bottom: this.bottomInset + 20 })
       }
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .align(Alignment.Top)
     }

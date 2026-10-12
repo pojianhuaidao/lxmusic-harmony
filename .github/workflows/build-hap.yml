@@ -90,6 +90,7 @@ jobs:
       - name: Sign HAP & assemble APP & bundle zip
         id: bundle
         env:
+          HOS_SDK_HOME: ${{ env.HOS_SDK_HOME }}
           LXMUSIC_KEY_PASS: ${{ secrets.LXMUSIC_KEY_PASS }}
           HAS_KEY: ${{ secrets.LXMUSIC_KEY_B64 != '' }}
         run: |
@@ -98,9 +99,10 @@ jobs:
           VER="${{ steps.meta.outputs.version_name }}"
           SHORT="${{ steps.meta.outputs.short_sha }}"
           UNSIGNED="lxmusic_${VER}_unsigned.hap"
-          SIGNED="lxmusic_${VER}_signed.hap"
+          SIGNED="entry-default-signed.hap"
           APP="lxmusic_${VER}_release.app"
           ZIP="lxmusic_${VER}_${SHORT}_release.zip"
+          PACK_INFO="entry/build/default/outputs/default/pack.info"
           mkdir -p dist
           cp "$HAP" "dist/${UNSIGNED}"
           if [ "$HAS_KEY" = "true" ]; then
@@ -113,7 +115,20 @@ jobs:
               -keystoreFile key/lxmusic.p12 -keystorePwd "$LXMUSIC_KEY_PASS" \
               -signAlg SHA256withECDSA \
               -inFile "$HAP" -outFile "dist/${SIGNED}"
-            python3 tools/ci/assemble_bundle.py assemble-app "dist/${SIGNED}" "dist/${APP}"
+            APK_TOOL=$(find "${HOS_SDK_HOME}" -name app_packing_tool.jar | head -n1)
+            if [ -z "$APK_TOOL" ]; then
+              echo "app_packing_tool.jar not found in SDK" >&2
+              exit 1
+            fi
+            python3 tools/ci/assemble_bundle.py assemble-app "dist/${SIGNED}" "$PACK_INFO" "$APK_TOOL" "dist/${APP}_raw.app"
+            java -jar tools/sign/hap-sign-tool.jar sign-app \
+              -mode localSign \
+              -keyAlias lxmusic -keyPwd "$LXMUSIC_KEY_PASS" \
+              -appCertFile "$CERT" -profileFile "$PROFILE" \
+              -keystoreFile key/lxmusic.p12 -keystorePwd "$LXMUSIC_KEY_PASS" \
+              -signAlg SHA256withECDSA \
+              -inFile "dist/${APP}_raw.app" -outFile "dist/${APP}"
+            rm -f "dist/${APP}_raw.app"
             echo "signed app built"
           else
             echo "secrets.LXMUSIC_KEY_B64 not configured -> skip signing"

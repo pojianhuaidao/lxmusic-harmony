@@ -457,6 +457,7 @@ export struct DownloadListPane {
             endMargin: 0,
           })
           .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
           .padding({ bottom: this.bottomInset })
         }
         .width('100%')

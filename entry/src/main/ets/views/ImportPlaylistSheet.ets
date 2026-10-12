@@ -384,6 +384,7 @@ export struct ImportPlaylistSheet {
         .width('100%')
       }
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .layoutWeight(1)
       .width('100%')
 

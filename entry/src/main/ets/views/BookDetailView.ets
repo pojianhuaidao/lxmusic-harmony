@@ -419,6 +419,7 @@ export struct BookDetailView {
       .width('100%')
       .height('100%')
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
       .divider({ strokeWidth: 0.6, color: C_DIVIDER, startMargin: 46, endMargin: 0 })
       .padding({ top: this.topInset })
     }

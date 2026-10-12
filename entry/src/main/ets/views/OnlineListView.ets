@@ -8,7 +8,7 @@ import { C_BG, C_DIVIDER, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_
 import { I_CHECK_CIRCLE, I_CIRCLE, I_DOWNLOAD, I_HEART, I_HEART_FILLED,
   I_MORE_CIRCLE, I_PLAY_CIRCLE, I_VOLUME, IconGlyph } from '../ui/Icons';
 import { CoverArt, FavoriteHeart } from '../ui/Widgets';
-import { SongListSource } from '../ui/SongListSource';
+import { EMPTY_SONG_ITEM, SongListSource } from '../ui/SongListSource';
 import { allSelectedOf, favoriteSongs, pruneSelected, queueSongs, selectActionsOf, SelectAction, selectedSongs,
   SelectionActions, SelectSession, toggleSelected } from '../ui/Selection';
 import { immersiveMaterialForBar } from '../ui/Glass';
@@ -759,6 +759,8 @@ export struct OnlineListView {
 
   @Builder
   songRow(item: SongItem, index: number) {
+    // 注意：@Builder 内不允许写局部变量等非 UI 语句，哨兵兜底由
+    // LazyForEach itemGen 在调用本方法前完成（见 build()），这里的 item 已保证非空。
     Row({ space: 12 }) {
       CoverArt({
         url: CoverStore.getInstance().coverFor(item.musicInfoJson, item.coverUrl),
@@ -934,9 +936,11 @@ export struct OnlineListView {
             } else {
               // 懒加载：在线榜单动辄几百首，一次性建完所有行会卡
               LazyForEach(this.listSource, (item: SongItem, index: number) => {
+                // 数据源刷新（load 分页替换）期间可能回调到已失效的 item，
+                // 在调用处用三元表达式落到哨兵空条目上（itemGen 属 UI 构建上下文，不能写局部变量）。
                 ListItem() {
                   Column() {
-                    this.songRow(item, index)
+                    this.songRow((item === undefined || item === null) ? EMPTY_SONG_ITEM : item, index)
                     if (index < this.songs.length - 1) {
                       Divider()
                         .strokeWidth(0.6)
@@ -946,7 +950,11 @@ export struct OnlineListView {
                   }
                   .width('100%')
                 }
-              }, (item: SongItem, index: number) => `${index}_${item.id}`)
+              }, (item: SongItem, index: number) => {
+                // key 生成器同样可能收到已失效的 item，落到哨兵上防 undefined 访问
+                const safe: SongItem = (item === undefined || item === null) ? EMPTY_SONG_ITEM : item;
+                return `${index}_${safe.id}`;
+              })
 
               if (this.error.length > 0) {
                 ListItem() {
@@ -993,6 +1001,7 @@ export struct OnlineListView {
             }
           }
           .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
           // 内容可以滚进透明标题栏底下（壳层传来的 topInset 就是「状态栏 + 标题栏」）。
           // 多选时工具条在顶栏里，列表不用让位 —— 一直是同一段偏移。
           .contentStartOffset(this.topInset + 6)

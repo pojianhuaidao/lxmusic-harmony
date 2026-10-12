@@ -303,12 +303,12 @@ export function fromLxMusicInfo(info: LxMusicInfoNew): SongItem {
   }
 
   return {
-    id: info.id,
-    name: info.name,
-    singer: info.singer,
+    id: info.id ?? '',
+    name: info.name ?? '',
+    singer: info.singer ?? '',
     coverUrl: coverUrl,
     art: coverUrl.length === 0,
-    source: info.source,
+    source: info.source ?? '',
     quality: bestQuality(info),
     interval: old.interval,
     musicInfoJson: JSON.stringify(old),

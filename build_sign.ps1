@@ -22,6 +22,19 @@ $KeyDir = Join-Path $Root "key"
 $OutDir = Join-Path $Root "output"
 $SignJar = Join-Path $Root "tools\sign\hap-sign-tool.jar"
 
+# ---- 1b. locate app_packing_tool.jar (官方 .app 打包，规避手搓 zip 导致 AGC 996) ----
+$AppPackJar = Get-ChildItem "C:\Program Files\Huawei\DevEco Studio\sdk" -Recurse -Filter "app_packing_tool.jar" -ErrorAction SilentlyContinue |
+    Select-Object -First 1 -ExpandProperty FullName
+if (-not $AppPackJar) {
+    $candidates = @(
+        "$env:DEVECO_SDK_HOME\toolchains\lib\app_packing_tool.jar",
+        "$env:DEVECO_HOME\sdk\default\openharmony\toolchains\lib\app_packing_tool.jar"
+    )
+    $AppPackJar = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+}
+if (-not $AppPackJar) { Write-Error "app_packing_tool.jar not found (DevEco SDK toolchains)." }
+Write-Host "==> app_packing_tool: $AppPackJar"
+
 # ---- 1. locate toolchain ----
 if (-not (Test-Path $SignJar)) {
     $SignJar = Join-Path $KeyDir "hap-sign-tool.jar"
@@ -92,7 +105,7 @@ Write-Host "==> pack.info: $packInfo"
 # ---- 5. output paths ----
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $unsignedOut = Join-Path $OutDir "lxmusic_${ver}_unsigned.hap"
-$signedHap   = Join-Path $OutDir "lxmusic_${ver}_signed.hap"
+$signedHap   = Join-Path $OutDir "entry-default-signed.hap"
 $appOut      = Join-Path $OutDir "lxmusic_${ver}_release.app"
 $zipOut      = Join-Path $OutDir "lxmusic_${ver}_release.zip"
 
@@ -110,8 +123,31 @@ java -jar $SignJar sign-app `
     -signAlg "SHA256withECDSA" `
     -inFile $inHap -outFile $signedHap
 
-# ---- 8. assemble .app (zip: entry-default-signed.hap + pack.info) ----
-Write-Host "==> assembling APP -> $appOut"
+# ---- 8. assemble .app (官方 app_packing_tool 打包，再对外层签名) ----
+#     手搓 zip 组装会被 AGC 报 996 解析失败，必须用官方 app_packing_tool.jar --mode app。
+$appRaw = Join-Path $OutDir "lxmusic_${ver}_app_raw.app"
+Write-Host "==> assembling raw APP (app_packing_tool) -> $appRaw"
+java -jar $AppPackJar `
+    --mode app `
+    --hap-path $signedHap `
+    --pack-info-path $packInfo `
+    --out-path $appRaw
+if (-not (Test-Path $appRaw)) { Write-Error "app_packing_tool failed, no output: $appRaw" }
+Write-Host "==> raw APP size: $((Get-Item $appRaw).Length)B"
+
+# 8.2 对 .app 做外层签名（sign-app 同样适用 app 整包）
+Write-Host "==> outer-signing APP -> $appOut"
+java -jar $SignJar sign-app `
+    -mode localSign `
+    -keyAlias $alias -keyPwd $pass `
+    -appCertFile $cer -profileFile $p7b `
+    -keystoreFile $p12 -keystorePwd $pass `
+    -signAlg "SHA256withECDSA" `
+    -inFile $appRaw -outFile $appOut
+Remove-Item $appRaw -Force
+Write-Host "==> signed APP size: $((Get-Item $appOut).Length)B"
+
+# ---- 9. package zip (unsigned HAP + signed APP) ----
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Add-Type -AssemblyName System.IO.Compression
 function Add-ZipEntry($zip, $srcPath, $entryName) {
@@ -124,18 +160,6 @@ function Add-ZipEntry($zip, $srcPath, $entryName) {
         $stream.Close()
     }
 }
-$fs = [System.IO.File]::Open($appOut, [System.IO.FileMode]::Create)
-$zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
-try {
-    Add-ZipEntry $zip $signedHap "entry-default-signed.hap"
-    Add-ZipEntry $zip $packInfo  "pack.info"
-} finally {
-    $zip.Dispose()
-    $fs.Dispose()
-}
-Write-Host "==> APP size: $((Get-Item $appOut).Length)B"
-
-# ---- 9. package zip (unsigned HAP + signed APP) ----
 Write-Host "==> packaging zip -> $zipOut"
 $fs2 = [System.IO.File]::Open($zipOut, [System.IO.FileMode]::Create)
 $zip2 = New-Object System.IO.Compression.ZipArchive($fs2, [System.IO.Compression.ZipArchiveMode]::Create)

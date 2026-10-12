@@ -1,7 +1,7 @@
 # lxmusic-harmony
 
 洛雪音乐（[lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)）的鸿蒙移植版，
-界面与播放链路用 ArkTS / ArkUI 重写，跑在 HarmonyOS 上（bundle: `com.example.listen`）。
+界面与播放链路用 ArkTS / ArkUI 重写，跑在 HarmonyOS 上（bundle: `music.hm.o`）。
 
 > 本项目不包含、也不提供任何音频内容。播放地址由你自己导入的音源脚本解析，
 > 版权内容请通过正规渠道获取。

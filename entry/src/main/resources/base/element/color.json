@@ -42,11 +42,11 @@
     },
     {
       "name": "c_text_sub",
-      "value": "#8A8A8E"
+      "value": "#6C6C70"
     },
     {
       "name": "c_text_weak",
-      "value": "#B4B4B8"
+      "value": "#6E6E72"
     },
     {
       "name": "c_icon",
@@ -54,7 +54,7 @@
     },
     {
       "name": "c_chevron",
-      "value": "#C2C2C6"
+      "value": "#7E7E84"
     },
     {
       "name": "c_seg_unselected",
@@ -66,7 +66,7 @@
     },
     {
       "name": "c_red",
-      "value": "#E33B3B"
+      "value": "#C83A3A"
     },
     {
       "name": "c_on_accent",
@@ -126,27 +126,27 @@
     },
     {
       "name": "c_icon_blue",
-      "value": "#2F6BFF"
+      "value": "#3B67D6"
     },
     {
       "name": "c_icon_purple",
-      "value": "#8257F5"
+      "value": "#7952E2"
     },
     {
       "name": "c_icon_green",
-      "value": "#2FBE5B"
+      "value": "#2D7C46"
     },
     {
       "name": "c_icon_orange",
-      "value": "#F4A11E"
+      "value": "#8E672B"
     },
     {
       "name": "c_icon_coral",
-      "value": "#F4634B"
+      "value": "#C2422D"
     },
     {
       "name": "p_kw",
-      "value": "#FF6B35"
+      "value": "#B3502C"
     },
     {
       "name": "p_kw_tint",
@@ -154,7 +154,7 @@
     },
     {
       "name": "p_kg",
-      "value": "#4A90D9"
+      "value": "#3170B3"
     },
     {
       "name": "p_kg_tint",
@@ -162,7 +162,7 @@
     },
     {
       "name": "p_mg",
-      "value": "#FF4081"
+      "value": "#CB2F64"
     },
     {
       "name": "p_mg_tint",
@@ -170,7 +170,7 @@
     },
     {
       "name": "p_tx",
-      "value": "#31C27C"
+      "value": "#2C7C56"
     },
     {
       "name": "p_tx_tint",

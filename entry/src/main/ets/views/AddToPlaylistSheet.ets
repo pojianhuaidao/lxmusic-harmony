@@ -88,6 +88,7 @@ export struct AddToPlaylistSheet {
           }, (item: PlaylistSummary) => `${item.id}_${item.count}_${item.name}`)
         }
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
         .layoutWeight(1)
         .width('100%')
         .margin({ top: 6 })
