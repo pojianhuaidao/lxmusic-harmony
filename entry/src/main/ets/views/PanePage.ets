@@ -124,7 +124,7 @@ export struct PanePage {
       .barHeight(HDS_BAR_HEIGHT)
       // 栏体那一条不要自己的底色（默认是一条灰白带）：观感全交给悬浮胶囊本身
       .barBackgroundColor(Color.Transparent)
-      .barFloatingStyle(this.floatBarStyle())
+      // 已移除 .barFloatingStyle()：API 26.0.0 新增，HarmonyOS 6.1(23) 设备不存在该 API，调用即抛 undefined is not callable（JsCrash PanePage.ts:241:18），降级默认栏样式
       .width('100%')
       .height('100%')
     }

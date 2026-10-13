@@ -1027,7 +1027,8 @@ export struct OnlineListView {
       .barHeight(HDS_BAR_HEIGHT)
       // 栏体那一条不要自己的底色（默认是一条灰白带）：观感全交给悬浮胶囊本身
       .barBackgroundColor(Color.Transparent)
-      .barFloatingStyle(this.floatBarStyle())
+      // barFloatingStyle 为 API 26.0.0 新增接口，低于该版本的系统（如 HarmonyOS 6.1 设备）运行时
+      // 不存在此方法，调用会抛 "undefined is not callable" 导致 JsCrash，故移除，降级为系统默认悬浮栏样式
       .width('100%')
       .height('100%')
     }

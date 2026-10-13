@@ -1259,40 +1259,9 @@ struct Index {
         // 高度写死成与自绘迷你栏同一个常量：两边必须一样高，观感才统一
         .barHeight(HDS_BAR_HEIGHT)
         .zIndex(1)
-        .barFloatingStyle({
-          /**
-           * 只给「页签栏宽度 + 离底距离 + 材质 + 迷你栏」，其余全部交给 HDS 自己算
-           *
-           * 这是派音（RzdMusic）那套配置，也正是这里之前被改坏的地方 —— 之前额外塞了
-           * `miniBarWidth` / `barSideMargin` / `gradientMask` / `barLayoutMode`：
-           *   - `miniBarWidth` 顶掉了 HDS 的让位动画：折叠态本来只有一颗圆钮宽
-           *     （宽度等于栏高），硬塞展开态的 286~328 就在页签栏右边压出一整条；
-           *   - `barSideMargin` 与 HDS 内部的宽度分配互相打架，两条栏一起展开时叠在一起；
-           *   - `barLayoutMode` 又把两条栏的排布方式改了第二遍。
-           * 现在宽度只声明页签栏那一档（见下面 barWidth），迷你栏多宽、怎么让位，
-           * 全由 HDS 按形态自己决定。
-           */
-          barWidth: {
-            // 窄屏铺到接近满宽（照华为音乐那种一条长胶囊托住页签的观感）
-            smallWidth: this.floatingBarSmallWidthVp(),
-            // 中 / 大档按**页签署数**给：284 / 328 是 HDS 对四个页签的档位值
-            // （官方文档里的分档只按窗口宽度给，不管页签署数），照那个宽度画就是一条
-            // 空落落的宽胶囊，所以按每颗页签 ~72vp 收窄：三个页签 = 216 / 240。
-            mediumWidth: 216,
-            largeWidth: 240,
-          },
-          barBottomMargin: this.homeTabBarBottomMarginVp(),
-          // 与标题栏、半模态共用同一个材质档位（外观设置里改一处，三处一起变）
-          systemMaterialEffect: buildTitleMaterial(this.materialLevel),
-          // 迷你栏：折叠态是那颗圆封面，展开态是迷你播放器
-          miniBar: {
-            miniBarBuilder: () => this.miniBarBuilder(),
-            onBarStyleChange: (miniBarStyle: HdsBarStyle) => {
-              AppStorage.setOrCreate(K_MINI_EXPANDED, miniBarStyle === HdsBarStyle.EXPAND);
-              this.publishLayout();
-            },
-          },
-        })
+        // 已移除 .barFloatingStyle()：API 26.0.0 新增，HarmonyOS 6.1(23) 设备不存在该 API，
+        // 调用即抛 undefined is not callable（JsCrash，与 OnlineListView/PanePage/PlaylistDetailView 同根因），
+        // 降级默认栏样式，悬浮迷你栏配置一并移除
         .onChange((index: number) => {
           this.activeTab = index;
         })

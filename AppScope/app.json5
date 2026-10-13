@@ -2,17 +2,18 @@
  * 版本号规则（唯一版本源）：
  *   versionName = 1.MMDD.NN   （MMDD=构建月日，NN=当日序号，从 01 开始）
  *   versionCode = MMDDNN 前补 1（即 1MMDDNN）
- * 例：2026-10-12 当日第 1 次构建 -> 1.1012.01 / 1101201
+ *   buildVersion = versionCode（与版本号保持一致，如 1101303）
+ * 例：2026-10-12 当日第 1 次构建 -> 1.1012.01 / 1101201 / build 1101201
  * 本地（DevEco / build_sign.ps1）与 CI（build-hap.yml）出包必须以此文件为准，
- * 两处版本号保持一致，不得各自修改。
+ * 三处版本号保持一致，不得各自修改。
  */
 {
   "app": {
     "bundleName": "music.hm.o",
     "vendor": "example",
-    "versionCode": 1101302,
-    "versionName": "1.1013.02",
-    "buildVersion": "1",
+    "versionCode": 1101304,
+    "versionName": "1.1013.04",
+    "buildVersion": "1101304",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }
