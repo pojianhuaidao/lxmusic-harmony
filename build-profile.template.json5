@@ -25,6 +25,8 @@
         "compatibleSdkVersion": "6.1.0(23)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
+          // 注：关闭 SourceMap 在模块级（entry/build-profile.json5）的 buildOption 设置，
+          // 根级 products.buildOption 的 schema 不接受该字段
           "strictMode": {
             "caseSensitiveCheck": true,
             "useNormalizedOHMUrl": true

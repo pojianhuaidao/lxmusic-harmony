@@ -8,6 +8,7 @@ import { SongItem } from '../player/PlaySession';
 import { LxMusicInfo } from '../music/MusicSearch';
 import { bytesToUtf8 } from '../music/LxCrypto';
 import { SongSideTable } from './SideTable';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'LocalMusic';
@@ -159,7 +160,7 @@ export class LocalMusic implements SongSideTable {
     if (this.ready) {
       return;
     }
-    this.dir = `${context.filesDir}/${DIR_NAME}`;
+    this.dir = `${storageRootDir(context)}/${DIR_NAME}`;
     this.coverDir = `${this.dir}/${COVER_DIR}`;
     try {
       if (!fs.accessSync(this.dir)) {

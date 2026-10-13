@@ -3,6 +3,7 @@ import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
 import { BookChapter, BookHit } from './BookTypes';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'BookShelf';
@@ -42,7 +43,7 @@ export class BookShelf {
   private cache: ShelvedBook[] = [];
 
   init(context: common.Context): void {
-    this.path = `${context.filesDir}/${SHELF_FILE}`;
+    this.path = `${storageRootDir(context)}/${SHELF_FILE}`;
     try {
       this.ready = true;
       this.cache = this.read();

@@ -1,6 +1,7 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'PlaySettings';
@@ -185,7 +186,7 @@ export class PlaySettings {
     if (this.inited) {
       return;
     }
-    this.file = `${context.filesDir}/${FILE_NAME}`;
+    this.file = `${storageRootDir(context)}/${FILE_NAME}`;
     this.inited = true;
     const text: string = this.read();
     if (text.length > 0) {

@@ -16,6 +16,7 @@ import { AutoDownloadSong, clearDownloadedFiles, removeDownloadedFile, setAutoDo
 import { TagSink } from './TagWriter';
 import { isLocalSong } from '../local/LocalMusic';
 import { isWebDavSong } from '../webdav/WebDavLibrary';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'DownloadManager';
@@ -198,7 +199,7 @@ export class DownloadManager {
       return;
     }
     this.context = context;
-    this.dir = `${context.filesDir}/${DIR_NAME}`;
+    this.dir = `${storageRootDir(context)}/${DIR_NAME}`;
     try {
       if (!fs.accessSync(this.dir)) {
         fs.mkdirSync(this.dir);

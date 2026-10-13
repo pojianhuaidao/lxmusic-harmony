@@ -2,6 +2,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SourceInfo } from './LxTypes';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'SourceStore';
@@ -33,7 +34,7 @@ export class SourceStore {
   private ready: boolean = false;
 
   init(context: common.Context): void {
-    this.dir = `${context.filesDir}/${STORE_DIR}`;
+    this.dir = `${storageRootDir(context)}/${STORE_DIR}`;
     this.indexFile = `${this.dir}/${INDEX_FILE}`;
     try {
       if (!fs.accessSync(this.dir)) {

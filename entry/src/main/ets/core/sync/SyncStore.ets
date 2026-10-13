@@ -2,6 +2,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LxListData, LxMusicInfoNew, LxUserListInfoFull } from './SyncTypes';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'SyncStore';
@@ -28,7 +29,7 @@ export class SyncStore {
   private ready: boolean = false;
 
   init(context: common.Context): void {
-    this.dir = `${context.filesDir}/${STORE_DIR}`;
+    this.dir = `${storageRootDir(context)}/${STORE_DIR}`;
     try {
       if (!fs.accessSync(this.dir)) {
         fs.mkdirSync(this.dir);

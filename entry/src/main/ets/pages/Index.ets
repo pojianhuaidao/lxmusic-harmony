@@ -1,3 +1,4 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { common } from '@kit.AbilityKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { SymbolGlyphModifier, window } from '@kit.ArkUI';
@@ -23,15 +24,14 @@ import { PageTitle, RoundIconButton, WidePane } from '../ui/Widgets';
 import { AppearanceSettingsView } from '../views/AppearanceSettingsView';
 import { AboutView } from '../views/AboutView';
 import { WebDavSettingsView } from '../views/WebDavSettingsView';
-import { I_BOOK, I_BOOK_FILL, I_CHEVRON_DOWN, I_CLOSE, I_HOME, I_HOME_FILL, I_PERSON, I_PERSON_FILL,
-  I_SEARCH, I_SELECT_ALL, IconGlyph } from '../ui/Icons';
+import { I_CHEVRON_DOWN, I_CLOSE, I_HOME, I_HOME_FILL, I_PERSON, I_PERSON_FILL, I_PLAYLIST,
+  I_PLAYLIST_FILL, I_SEARCH, I_SELECT_ALL, IconGlyph } from '../ui/Icons';
 import { MiniBarView } from '../views/MiniBar';
-import { BookSandboxHost } from '../components/BookSandboxHost';
-import { BookDetailView } from '../views/BookDetailView';
-import { ListenView } from '../views/ListenView';
-import { BookShelf } from '../core/book/BookShelf';
-import { BookHit } from '../core/book/BookTypes';
+import { HuaweiAccount, K_ACCOUNT_UID, K_ACCOUNT_NAME } from '../core/account/HuaweiAccount';
 import { MineView } from '../views/MineView';
+import { SongListView } from '../views/SongListView';
+import { BackupOptionsView } from '../views/BackupOptionsView';
+import { HuaweiAccountSheet } from '../views/HuaweiAccountSheet';
 import { OnlineListView } from '../views/OnlineListView';
 import { PanePage } from '../views/PanePage';
 import { PlayerView } from '../views/PlayerView';
@@ -43,9 +43,7 @@ import { DownloadListPane } from '../views/DownloadListView';
 import { WebDavPane } from '../views/WebDavView';
 import { K_RECOMMEND_SOURCE, RecommendView } from '../views/RecommendView';
 import { SearchView } from '../views/SearchView';
-import { SettingsView } from '../views/SettingsView';
 import { SourceSettingsView } from '../views/SourceSettingsView';
-import { SyncSettingsView } from '../views/SyncSettingsView';
 import { CacheSettingsView } from '../views/CacheSettingsView';
 import { PlaySettingsView } from '../views/PlaySettingsView';
 import { DownloadSettingsView } from '../views/DownloadSettingsView';
@@ -53,10 +51,15 @@ import { PlaylistSummary } from '../core/player/PlaySession';
 import { K_SELECT_ACTIVE, K_SELECT_ALL, K_SELECT_COUNT, SelectSession } from '../ui/Selection';
 
 /** 主界面 / 子页面 */
+/** 日志域：当前音源摘要等运行日志统一走 hilog，便于 hdc log 过滤 */
+const DOMAIN: number = 0x0001;
+const TAG: string = 'Index';
+
 const PAGE_MAIN: string = 'main';
 const PAGE_SEARCH: string = 'search';
 const PAGE_SOURCE: string = 'source';
-const PAGE_SYNC: string = 'sync';
+/** 备份选项（原「数据」/「同步设置」，含华为账号与 WebDAV 两条备份链路） */
+const PAGE_BACKUP: string = 'backup';
 const PAGE_PLAYLIST: string = 'playlist';
 const PAGE_CACHE: string = 'cache';
 /** 播放设置 */
@@ -71,8 +74,6 @@ const PAGE_ONLINE: string = 'online';
 const PAGE_WEBDAV: string = 'webdav';
 /** 关于（作者 / 开源协议 / 仓库地址） */
 const PAGE_ABOUT: string = 'about';
-/** 设置（「我的」页那张卡的「设置」；原来是底部的一个页签，现在从「我的」里进） */
-const PAGE_SETTINGS: string = 'settings';
 /** 播放历史（「我的」页快捷入口里的「最近播放」） */
 const PAGE_HISTORY: string = 'history';
 /** 本地音乐（导入本机音频 / 批量移除） */
@@ -81,8 +82,6 @@ const PAGE_LOCAL: string = 'local';
 const PAGE_DOWNLOADS: string = 'downloads';
 /** 云端音乐（WebDAV 曲库，与「WebDAV 云端音乐」设置页是两件事） */
 const PAGE_CLOUD: string = 'cloud';
-/** 听书：一本书的详情 + 目录 */
-const PAGE_BOOK: string = 'book';
 
 /** 底部悬浮页签的页签 */
 interface TabDef {
@@ -92,20 +91,16 @@ interface TabDef {
 }
 
 /**
- * 三个页签：推荐 / 听书 / 我的
+ * 三个页签：推荐 / 歌单 / 我的
  *
- * 原来是四个（推荐 / 歌单 / 我的 / 设置）：歌单与设置的**内容**现在都在「我的」页里
- * （照华为音乐的「我的」重排：快捷入口 + 歌单卡 + 设置卡），再留着那两个页签就是
- * 同一件事有两个入口，所以先收成两个。
- *
- * 「听书」单独占一栏，夹在推荐与我的之间：它**不是**音乐的一种（书源是阅读/Legado
- * 的 JSON 规则，与音源完全不同的一套协议，见 core/book/book_preload.js），
- * 混进推荐页会让「音乐」那一栏的语义变糊；而它又是使用频率很高的主功能，
- * 藏在「我的」的二级入口里不合适，所以给它一个并列的一级页签。
+ * 「听书」页已整体砍掉，改成「歌单」页（原「我的」页里的自建歌单 / 收藏歌单 / 导入
+ * 一段搬了过来）；原「设置」页也整体并入「我的」页（音源 / 同步 / 播放 / 缓存 / 下载 /
+ * 云音乐 / 显示 / 关于），不再单独占页签。设置类子页面（音源设置、播放设置等）
+ * 仍是点击后推入的二级页面。
  */
 const TABS: TabDef[] = [
   { icon: I_HOME, iconActive: I_HOME_FILL, label: '推荐' },
-  { icon: I_BOOK, iconActive: I_BOOK_FILL, label: '听书' },
+  { icon: I_PLAYLIST, iconActive: I_PLAYLIST_FILL, label: '歌单' },
   { icon: I_PERSON, iconActive: I_PERSON_FILL, label: '我的' },
 ];
 
@@ -129,7 +124,6 @@ struct Index {
   @State queueOpen: boolean = false;
   @State topInset: number = 0;
   @State bottomInset: number = 0;
-  @State sourceSummary: string = '未加载音源';
   @State toast: string = '';
   /** 歌单详情页当前打开的歌单（路由参数只收 Object，这里直接由壳层持有更省事） */
   @State routePlaylistId: string = '';
@@ -140,11 +134,9 @@ struct Index {
   @State routeOnlineId: string = '';
   @State routeOnlineName: string = '';
   @State routeOnlineCover: string = '';
-  /** 听书详情页当前打开的书（同样由壳层持有，路由参数只收 Object） */
-  @State routeBook: BookHit = {
-    id: '', sourceId: '', sourceName: '', name: '', author: '', coverUrl: '',
-    intro: '', kind: '', wordCount: '', status: '', lastChapter: '', bookUrl: '',
-  };
+  /** 华为账号面板（「我的」页右上角人形钮打开的底部半模态） */
+  @State accountOpen: boolean = false;
+  @StorageLink(K_ACCOUNT_UID) accountUid: string = '';
   @StorageLink(K_CURRENT_ID) currentId: string = '';
   @StorageLink(K_STATUS_TEXT) statusText: string = '';
   @StorageLink(K_QUEUE_COUNT) queueCount: number = 0;
@@ -198,14 +190,19 @@ struct Index {
   private toastTimer: number = 0;
 
   aboutToAppear(): void {
-    PlaySession.getInstance().bootstrap();
+    // 恢复上次播放现场：内部读文件 / 初始化播放器，失败只记日志，不能让它把启动页带崩
+    try {
+      PlaySession.getInstance().bootstrap();
+    } catch (e) {
+      console.error('[Index] bootstrap failed: ' + JSON.stringify(e));
+    }
 
-    // 听书：书架要早于任何页面初始化（「我的」页与听书页都可能立刻读它）
+    // 华为账号：启动时恢复端侧登录态（登录后「我的」页右上角人形钮变实心）
     try {
       const hostContext: common.Context = this.getUIContext().getHostContext() as common.Context;
-      BookShelf.getInstance().init(hostContext);
+      void HuaweiAccount.getInstance().bootstrap(hostContext);
     } catch (e) {
-      // 预览器等环境拿不到 context：听书那栏会降级成「没有书源」，不影响其余功能
+      // 预览器等环境拿不到 context：按未登录处理，不影响其余功能
     }
 
     const engine = SourceEngine.getInstance();
@@ -355,21 +352,25 @@ struct Index {
 
   // ------------------------------------------------------------ 状态提示
 
+  /** 当前音源摘要：界面不再展示（原「音源设置」入口下的提示文字），改为写入运行日志 */
   private refreshSourceSummary(): void {
     const engine = SourceEngine.getInstance();
     const list: SourceInfo[] = engine.listSources();
+    let summary: string;
     if (!engine.isInited()) {
-      this.sourceSummary = list.length > 0 ? `本地已存 ${list.length} 个音源（未加载）` : '未加载音源';
-      return;
-    }
-    const loaded: string = engine.getLoadedSourceId();
-    for (const item of list) {
-      if (item.id === loaded) {
-        this.sourceSummary = `已就绪：${item.name}`;
-        return;
+      summary = list.length > 0 ? `本地已存 ${list.length} 个音源（未加载）` : '未加载音源';
+    } else {
+      const loaded: string = engine.getLoadedSourceId();
+      let loadedName: string | null = null;
+      for (const item of list) {
+        if (item.id === loaded) {
+          loadedName = item.name;
+          break;
+        }
       }
+      summary = loadedName !== null ? `已就绪：${loadedName}` : '已加载音源';
     }
-    this.sourceSummary = '已加载音源';
+    hilog.info(DOMAIN, TAG, '当前音源：%{public}s', summary);
   }
 
   /**
@@ -609,6 +610,15 @@ struct Index {
             this.go(PAGE_SEARCH);
           },
         })
+      } else if (this.activeTab === 2) {
+        // 华为账号：未登录空心人形、已登录实心（点开登录 / 备份 / 恢复面板）
+        RoundIconButton({
+          icon: this.accountUid.length > 0 ? I_PERSON_FILL : I_PERSON,
+          boxSize: 40, iconSize: 21, label: '华为账号', materialFirst: true,
+          onTap: () => {
+            this.accountOpen = true;
+          },
+        })
       }
     }
     .width('100%')
@@ -659,6 +669,21 @@ struct Index {
   @Builder
   queueSheet() {
     PlayQueueContent({ bottomInset: this.bottomInset })
+  }
+
+  /** 华为账号登录 / 管理面板（「我的」页右上角人形钮打开的底部半模态） */
+  @Builder
+  accountSheet() {
+    HuaweiAccountSheet({
+      bottomInset: this.bottomInset,
+      onGoBackup: () => {
+        this.accountOpen = false;
+        this.go(PAGE_BACKUP);
+      },
+      onClose: () => {
+        this.accountOpen = false;
+      },
+    })
   }
 
   /**
@@ -734,12 +759,6 @@ struct Index {
     this.pathStack.pushPath({ name: PAGE_ONLINE });
   }
 
-  /** 点一本听书 -> 打开书籍详情页（目录 + 播放那一集） */
-  private openBook(hit: BookHit): void {
-    this.routeBook = hit;
-    this.pathStack.pushPath({ name: PAGE_BOOK });
-  }
-
   /**
    * 页面之间的跳转请求（设置页的每一项、「我的」页的快捷入口与那张设置卡都走这里）
    *
@@ -752,7 +771,7 @@ struct Index {
       return;
     }
     if (action === 'sync') {
-      this.go(PAGE_SYNC);
+      this.go(PAGE_BACKUP);
       return;
     }
     if (action === 'cache') {
@@ -777,10 +796,6 @@ struct Index {
     }
     if (action === 'webdav') {
       this.go(PAGE_WEBDAV);
-      return;
-    }
-    if (action === 'settings') {
-      this.go(PAGE_SETTINGS);
       return;
     }
     // 「我的」页那一排快捷入口：收藏进内置那张收藏歌单的详情，其余四样各自是一页
@@ -970,13 +985,13 @@ struct Index {
       .onHidden(() => {
         this.refreshSourceSummary();
       })
-    } else if (name === PAGE_SYNC) {
+    } else if (name === PAGE_BACKUP) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
-          SyncSettingsView({ bottomInset: this.bottomInset, topInset: HDS_TITLE_BAR_HEIGHT + this.topInset })
+          BackupOptionsView({ bottomInset: this.bottomInset, topInset: HDS_TITLE_BAR_HEIGHT + this.topInset })
         }
       }
-      .titleBar(this.titleBarOptions('同步设置'))
+      .titleBar(this.titleBarOptions('备份选项'))
     } else if (name === PAGE_CACHE) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1004,7 +1019,7 @@ struct Index {
           AppearanceSettingsView({ bottomInset: this.bottomInset, topInset: HDS_TITLE_BAR_HEIGHT + this.topInset })
         }
       }
-      .titleBar(this.titleBarOptions('外观'))
+      .titleBar(this.titleBarOptions('显示设置'))
     } else if (name === PAGE_WEBDAV) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1019,22 +1034,6 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('关于'))
-    } else if (name === PAGE_SETTINGS) {
-      // 「我的」页那张卡的「设置」：内容就是原来的设置页（它原来是一个页签），
-      // 所以让位方式与页签时一样 —— 页面内部自己带顶部占位与渐隐，这里不再套 fadeTop
-      HdsNavDestination() {
-        WidePane({ maxWidth: this.contentMaxWidth() }) {
-          SettingsView({
-            topInset: HDS_TITLE_BAR_HEIGHT + this.topInset,
-            bottomInset: this.bottomInset,
-            sourceSummary: this.sourceSummary,
-            onNavigate: (action: string) => {
-              this.onSettingAction(action);
-            },
-          })
-        }
-      }
-      .titleBar(this.titleBarOptions('设置'))
     } else if (name === PAGE_HISTORY) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth() }) {
@@ -1141,38 +1140,6 @@ struct Index {
       }
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('云端音乐'))
-    } else if (name === PAGE_BOOK) {
-      HdsNavDestination() {
-        WidePane({ maxWidth: this.contentMaxWidth() }) {
-          // 用 PanePage 而不是裸页面：它底下是「一列内容 + 一条悬浮迷你播放条」，
-          // 点一集开始听之后，这一页自己就有一条迷你栏，不必退回首页才看得到进度
-          PanePage({
-            windowWidth: this.windowWidth,
-            bottomInset: this.bottomInset,
-            onOpenPlayer: () => {
-              this.openPlayer();
-            },
-            onOpenQueue: () => {
-              this.openQueue();
-            },
-          }) {
-            BookDetailView({
-              book: this.routeBook,
-              topInset: HDS_TITLE_BAR_HEIGHT + this.topInset,
-              bottomInset: this.bottomInset + HDS_BAR_HEIGHT + 26,
-              windowWidth: this.windowWidth,
-              onOpenPlayer: () => {
-                this.openPlayer();
-              },
-              onOpenQueue: () => {
-                this.openQueue();
-              },
-            })
-          }
-        }
-      }
-      // 书名写在头图里，标题栏不再重复（与歌单详情 / 在线详情同一处理）
-      .titleBar(this.titleBarOptions(''))
     } else if (name === PAGE_ONLINE) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1253,11 +1220,14 @@ struct Index {
 
           TabContent() {
             WidePane({ maxWidth: this.contentMaxWidth() }) {
-              ListenView({
+              SongListView({
                 topInset: this.topInset + HDS_TITLE_BAR_HEIGHT,
                 bottomInset: this.bottomInset + 96,
-                onOpenBook: (hit: BookHit) => {
-                  this.openBook(hit);
+                onOpenPlaylist: (playlist: PlaylistSummary) => {
+                  this.openPlaylist(playlist);
+                },
+                onOpenOnline: (route: OnlineRoute) => {
+                  this.openOnline(route);
                 },
               })
             }
@@ -1270,17 +1240,10 @@ struct Index {
                 topInset: this.topInset + HDS_TITLE_BAR_HEIGHT,
                 bottomInset: this.bottomInset + 96,
                 // 「我的」页里那一排快捷入口（本地音乐 / 最近播放 / 下载管理 / 云端音乐）、
-                // 那张设置卡的「设置」，以及云端音乐的「去设置」都走壳层路由
+                // 那张设置卡的各项（音源 / 同步 / 播放 / 缓存 / 下载 / 云音乐 / 显示 / 关于），
+                // 以及云端音乐的「去设置」都走壳层路由
                 onNavigate: (action: string) => {
                   this.onSettingAction(action);
-                },
-                // 歌单卡里点一张歌单 → 与原来歌单页同一个入口（详情页在路由栈上）
-                onOpenPlaylist: (playlist: PlaylistSummary) => {
-                  this.openPlaylist(playlist);
-                },
-                // 「收藏歌单」那一段里点一张 → 那是**在线**歌单，走在线详情页
-                onOpenOnline: (route: OnlineRoute) => {
-                  this.openOnline(route);
                 },
               })
             }
@@ -1417,16 +1380,23 @@ struct Index {
       .height(1)
       .position({ x: 0, y: 0 })
 
-      // ---------------------------------------------------- 听书沙箱（1x1）
-      // 与音源沙箱是**两个独立页面**：音源沙箱要禁 eval、只暴露 lx.*；
-      // 听书沙箱要能 eval 规则、要用 DOM 做 CSS 选择器。塞进同一个页面会互相破坏，
-      // 所以各用各的（成本只是多一个 1x1 的 Web，见 components/BookSandboxHost.ets）
-      Column() {
-        BookSandboxHost()
-      }
-      .width(1)
-      .height(1)
-      .position({ x: 0, y: 0 })
+      // ---------------------------------------------------- 华为账号面板（底部半模态）
+      // 挂在独立的 1x1 节点上：最外层 Stack 已经挂了播放列表的 bindSheet，
+      // 同一个组件不能再叠第二个 bindSheet（见播放器那段的注释）
+      Column()
+        .width(1)
+        .height(1)
+        .bindSheet($$this.accountOpen, this.accountSheet(), {
+          preferType: SheetType.BOTTOM,
+          detents: [SheetSize.MEDIUM],
+          detentSelection: SheetSize.MEDIUM,
+          dragBar: true,
+          showClose: true,
+          backgroundColor: isGlassMaterialSupported() ? Color.Transparent : undefined,
+          blurStyle: isGlassMaterialSupported() ? undefined : BlurStyle.COMPONENT_ULTRA_THICK,
+          systemMaterial: immersiveMaterialForDialog(this.materialLevel),
+          title: { title: '华为账号' },
+        })
 
       // ---------------------------------------------------- 删除粒子飘散
       // 全局唯一的一层：任何页面删除时调 dustBus.spray(x, y)，粒子就在那里散开

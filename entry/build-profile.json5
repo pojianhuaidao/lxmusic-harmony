@@ -1,6 +1,10 @@
 {
   "apiType": "stageMode",
   "buildOption": {
+    // 注：本 SDK（26.0.0 / hvigor 6.26.8）的模块级 buildOption schema 仅支持
+    // resOptions / externalNativeOptions / sourceOption / napiLibFilterOption，
+    // 不识别 enableSourceMap 字段（加入会触发 00303038 配置校验失败）。
+    // 正式包不携带 SourceMap 由「release 构建模式」保证（见 CI 与 build_sign.ps1 的 buildMode=release）。
     "resOptions": {
       "copyCodeResource": {
         "enable": false

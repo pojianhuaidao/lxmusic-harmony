@@ -70,82 +70,63 @@ $appJson = Get-Content (Join-Path $Root "AppScope\app.json5") -Raw
 $verMatch = [regex]::Match($appJson, '"versionName"\s*:\s*"([^"]+)"')
 $ver = if ($verMatch.Success) { $verMatch.Groups[1].Value } else { "unknown" }
 
-# ---- 3. locate/build unsigned HAP ----
-$hapCandidates = @()
+# ---- 3. 修正 DEVECO_SDK_HOME（hvigor 依赖它定位 SDK；若指向失效路径会报 00303217） ----
+$sdkCandidates = @(
+    $env:DEVECO_SDK_HOME,
+    "C:\Program Files\Huawei\DevEco Studio\sdk"
+) | Where-Object { $_ -and (Test-Path $_) }
+$sdkHome = $sdkCandidates | Select-Object -First 1
+if (-not $sdkHome) { Write-Error "DevEco SDK not found (DEVECO_SDK_HOME invalid)." }
+$env:DEVECO_SDK_HOME = $sdkHome
+Write-Host "==> DEVECO_SDK_HOME -> $env:DEVECO_SDK_HOME"
+
+# ---- 3b. NODE_PATH 指向项目 node_modules（@ohos/hvigor 与 @ohos/hvigor-ohos-plugin 的链接，
+#     命令行裸跑 hvigor.js 时 IDE 内置插件不会自动进入解析链，需靠 NODE_PATH 兜底） ----
+if (-not $env:NODE_PATH) {
+    $env:NODE_PATH = Join-Path $Root "node_modules"
+}
+Write-Host "==> NODE_PATH -> $env:NODE_PATH"
+
+# ---- 4. locate/build unsigned HAP + signed APP（hvigor assembleApp 官方链路） ----
+#     官方 Build App(s) 链路：一次产出 unsigned HAP、signed HAP 与 signed APP。
+#     APP 内含 pac.json + entry-default.hap（与 pack.info packages.name 一致）+ 官方签名，
+#     是 AGC 测试分发唯一认可的格式（手搓 zip / 旧版 hap-sign-tool 重签会被 AGC 解析失败）。
+$unsignedOutHap = Join-Path $Root "entry\build\default\outputs\default\entry-default-unsigned.hap"
+$signedApp = Join-Path $Root "build\outputs\default\lxmusic-harmony-default-signed.app"
 if (-not $SkipBuild) {
-    Write-Host "==> building unsigned HAP (version $ver) ..."
+    Write-Host "==> building official HAP + APP (version $ver) ..."
     Push-Location $Root
     try {
-        node $hvigorJs --mode module -p product=default assembleHap --no-daemon
+        node $hvigorJs -p product=default -p buildMode=release assembleApp --no-daemon
     } finally {
         Pop-Location
     }
 }
-$hapCandidates = Get-ChildItem (Join-Path $Root "entry\build") -Recurse -Filter "*unsigned.hap" |
-    Sort-Object LastWriteTime -Descending
-if (-not $hapCandidates) {
-    # 兜底：排除 signed 命名的 hap
-    $hapCandidates = Get-ChildItem (Join-Path $Root "entry\build") -Recurse -Filter "*.hap" |
-        Where-Object { $_.Name -notmatch "-signed\.hap$" } |
-        Sort-Object LastWriteTime -Descending
-}
-if (-not $hapCandidates) { Write-Error "No unsigned HAP found. Run with -Build first." }
-$inHap = $hapCandidates[0].FullName
-Write-Host "==> unsigned HAP: $inHap"
-
-# ---- 4. locate pack.info ----
-$packInfo = Join-Path $Root "entry\build\default\outputs\default\pack.info"
-if (-not (Test-Path $packInfo)) {
-    $packInfo = Get-ChildItem (Join-Path $Root "entry\build") -Recurse -Filter "pack.info" |
+if (-not (Test-Path $signedApp)) {
+    # 兜底：自动探测 build\outputs\default 下最新的 *-signed.app
+    $signedApp = Get-ChildItem (Join-Path $Root "build\outputs\default") -Filter "*-signed.app" -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 }
-if (-not $packInfo) { Write-Error "pack.info not found. Run with -Build first." }
-Write-Host "==> pack.info: $packInfo"
+if (-not $signedApp) { Write-Error "No signed APP found. Run with -Build first." }
+if (-not (Test-Path $unsignedOutHap)) {
+    $unsignedOutHap = Get-ChildItem (Join-Path $Root "entry\build") -Recurse -Filter "*unsigned.hap" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+}
+if (-not $unsignedOutHap) { Write-Error "No unsigned HAP found. Run with -Build first." }
+Write-Host "==> unsigned HAP: $unsignedOutHap"
+Write-Host "==> signed APP  : $signedApp"
 
 # ---- 5. output paths ----
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $unsignedOut = Join-Path $OutDir "lxmusic_${ver}_unsigned.hap"
-$signedHap   = Join-Path $OutDir "entry-default-signed.hap"
 $appOut      = Join-Path $OutDir "lxmusic_${ver}_release.app"
 $zipOut      = Join-Path $OutDir "lxmusic_${ver}_release.zip"
 
-# ---- 6. copy unsigned version ----
-Copy-Item $inHap $unsignedOut -Force
+# ---- 6. copy official artifacts (hvigor 已签好 HAP/APP，直接落盘) ----
+Copy-Item $unsignedOutHap $unsignedOut -Force
+Copy-Item $signedApp $appOut -Force
 Write-Host "==> unsigned copy -> $unsignedOut"
-
-# ---- 7. sign HAP ----
-Write-Host "==> signing -> $signedHap"
-java -jar $SignJar sign-app `
-    -mode localSign `
-    -keyAlias $alias -keyPwd $pass `
-    -appCertFile $cer -profileFile $p7b `
-    -keystoreFile $p12 -keystorePwd $pass `
-    -signAlg "SHA256withECDSA" `
-    -inFile $inHap -outFile $signedHap
-
-# ---- 8. assemble .app (官方 app_packing_tool 打包，再对外层签名) ----
-#     手搓 zip 组装会被 AGC 报 996 解析失败，必须用官方 app_packing_tool.jar --mode app。
-$appRaw = Join-Path $OutDir "lxmusic_${ver}_app_raw.app"
-Write-Host "==> assembling raw APP (app_packing_tool) -> $appRaw"
-java -jar $AppPackJar `
-    --mode app `
-    --hap-path $signedHap `
-    --pack-info-path $packInfo `
-    --out-path $appRaw
-if (-not (Test-Path $appRaw)) { Write-Error "app_packing_tool failed, no output: $appRaw" }
-Write-Host "==> raw APP size: $((Get-Item $appRaw).Length)B"
-
-# 8.2 对 .app 做外层签名（sign-app 同样适用 app 整包）
-Write-Host "==> outer-signing APP -> $appOut"
-java -jar $SignJar sign-app `
-    -mode localSign `
-    -keyAlias $alias -keyPwd $pass `
-    -appCertFile $cer -profileFile $p7b `
-    -keystoreFile $p12 -keystorePwd $pass `
-    -signAlg "SHA256withECDSA" `
-    -inFile $appRaw -outFile $appOut
-Remove-Item $appRaw -Force
-Write-Host "==> signed APP size: $((Get-Item $appOut).Length)B"
+Write-Host "==> signed APP   -> $appOut ($((Get-Item $appOut).Length)B)"
 
 # ---- 9. package zip (unsigned HAP + signed APP) ----
 Add-Type -AssemblyName System.IO.Compression.FileSystem

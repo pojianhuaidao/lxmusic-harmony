@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'MediaCache';
@@ -101,7 +102,7 @@ export class MediaCache {
   private saveTimer: number = 0;
 
   init(context: common.Context): void {
-    this.dir = `${context.filesDir}/${DIR_NAME}`;
+    this.dir = `${storageRootDir(context)}/${DIR_NAME}`;
     this.lyricDir = `${this.dir}/${LYRIC_DIR}`;
     this.editedDir = `${this.dir}/${EDITED_DIR}`;
     try {

@@ -3,6 +3,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
 import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LxPlayer } from '../player/LxPlayer';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'AudioCache';
@@ -152,7 +153,7 @@ export class AudioCache {
   private indexTimer: number = 0;
 
   init(context: common.Context): void {
-    this.dir = `${context.filesDir}/${DIR_NAME}`;
+    this.dir = `${storageRootDir(context)}/${DIR_NAME}`;
     try {
       if (!fs.accessSync(this.dir)) {
         fs.mkdirSync(this.dir);

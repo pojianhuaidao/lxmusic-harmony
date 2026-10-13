@@ -2,7 +2,9 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { util } from '@kit.ArkTS';
 import { window, display } from '@kit.ArkUI';
+import { initialize as agConnectInitialize, JsonTypeInfo } from '@hw-agconnect/hmcore';
 import { PlaybackService } from '../core/player/PlaybackService';
 import { PlaySession } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
@@ -20,39 +22,73 @@ import { DownloadManager } from '../core/download/DownloadManager';
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
+  /**
+   * 逐个安全初始化：任一模块初始化失败只记日志、不阻断应用启动。
+   * 侧载 / 低权限 / 系统版本差异环境下，某个模块（如沙箱目录读写、AVSession、
+   * 文件索引恢复）抛异常不应表现为「启动即闪退」，否则连日志都来不及抓。
+   */
+  private safeInit(name: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (e) {
+      hilog.error(DOMAIN, 'testTag', '%{public}s init failed: %{public}s', name,
+        (e as Error).message === undefined ? JSON.stringify(e) : (e as Error).message);
+    }
+  }
+
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
-    // 系统音乐服务（AVSession + 后台播放长时任务）要一个 Ability 的 Context。
-    // 这里尽早给它：长时任务必须在应用还处于前台时申请。
-    PlaybackService.getInstance().init(this.context);
-    // 播放现场的落盘也要沙箱目录：必须在 seed()（Index 里）之前准备好，否则读不到上次的现场
-    PlaySession.getInstance().init(this.context);
-    // 本地音乐库：要读回导入过的索引（歌单 / 收藏里属于本地歌的那部分也挂在它上面），
-    // 必须早于 SyncManager.init —— 音乐库镜像到界面时会读这份侧表
-    LocalMusic.getInstance().init(this.context);
-    // 云端音乐库（WebDAV）：同样有自己的索引与歌单侧表，也要早于 SyncManager.init
-    WebDavLibrary.getInstance().init(this.context);
-    // 同步模块也要 Context：读配置、落音乐库，越早准备越好
-    SyncManager.getInstance().init(this.context);
-    // 缓存：元数据（播放地址 / 歌词）与播放缓存都要沙箱目录，同样尽早初始化
-    MediaCache.getInstance().init(this.context);
-    AudioCache.getInstance().init(this.context);
-    // 播放设置（音质 / 歌词 / 音频焦点）要读回上次的选择，而且必须早于界面创建：
-    // 界面用 @StorageLink 订阅它发布的值，晚了第一帧会拿到默认值。
-    PlaySettings.getInstance().init(this.context);
-    // 外观设置（材质档位 / 首页流光 / 封面圆角）：同样要早于界面创建，
-    // 界面用 @StorageLink 订阅它发布的值。
-    AppearanceSettings.getInstance().init(this.context);
-    // 下载：设置要先读回来（文件名格式 / 保存位置），管理器的索引也要在界面（我的页）
-    // 建出来之前恢复好，否则列表第一帧是空的
-    DownloadSettings.getInstance().init(this.context);
-    DownloadManager.getInstance().init(this.context);
-    // WebDAV 连接设置（服务器地址 / 账号密码）：要早于界面创建，
-    // 设置页与浏览页用 @StorageLink 订阅它发布的值
-    WebDavSettings.getInstance().init(this.context);
-    // 收藏歌单（歌单级的收藏，纯本地）：要早于界面创建 —— 「我的」页歌单卡那一段
-    // 与歌单详情页那颗「收藏歌单」钮都订阅它发布的版本号
-    CollectedPlaylists.getInstance().init(this.context);
+    // 防任意拉起：本应用只暴露桌面入口（exported=true 且 skills 仅
+    // entity.system.home + ohos.want.action.home，无 uri/自定义 action skill），
+    // 隐式拉起已被系统按 skills 匹配挡掉，无需运行时自杀式拦截。
+    // 注意：AGC 审核/测试分发拉起应用时 want.action 可能为空或其他值，
+    // 若在这里 terminateSelf 会表现为「启动即闪退」并被华为拒审，故只记录不终止。
+    if (want.action !== 'ohos.want.action.home') {
+      hilog.info(DOMAIN, 'testTag', 'launched with action: %{public}s',
+        want.action === undefined ? 'undefined' : want.action);
+    }
+    // AGC 初始化：读取 rawfile 的 agconnect-services.json 并初始化核心 SDK
+    // （华为账号授权 auth.signIn 依赖此初始化；失败只记日志，不阻断应用启动）
+    try {
+      const rawFile: Uint8Array = this.context.resourceManager.getRawFileContentSync('agconnect-services.json');
+      const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
+      const json: JsonTypeInfo = JSON.parse(decoder.decodeToString(rawFile)) as JsonTypeInfo;
+      agConnectInitialize(this.context, json);
+      hilog.info(DOMAIN, 'testTag', 'AGC initialized');
+    } catch (e) {
+      hilog.error(DOMAIN, 'testTag', 'AGC init failed: %{public}s', (e as Error).message);
+    }
+    // 系统音乐服务（AVSession + 后台播放长时任务）要一个 Ability 的 Context，
+    // 这里尽早给它（长时任务必须在应用还处于前台时申请）。
+    this.safeInit('PlaybackService', () => { PlaybackService.getInstance().init(this.context); });
+    // 播放现场的落盘也要沙箱目录：必须在 seed()（Index 里）之前准备好
+    this.safeInit('PlaySession', () => { PlaySession.getInstance().init(this.context); });
+    // 本地音乐库：读回导入索引（歌单 / 收藏里本地歌的侧表也挂在它上面），须早于 SyncManager
+    this.safeInit('LocalMusic', () => { LocalMusic.getInstance().init(this.context); });
+    // 云端音乐库（WebDAV）：同样有自己的索引与歌单侧表，也要早于 SyncManager
+    this.safeInit('WebDavLibrary', () => { WebDavLibrary.getInstance().init(this.context); });
+    // 同步模块也要 Context：读配置、落音乐库
+    this.safeInit('SyncManager', () => { SyncManager.getInstance().init(this.context); });
+    // 缓存：元数据（播放地址 / 歌词）与播放缓存都要沙箱目录
+    this.safeInit('MediaCache', () => { MediaCache.getInstance().init(this.context); });
+    this.safeInit('AudioCache', () => { AudioCache.getInstance().init(this.context); });
+    // 播放 / 外观 / 下载 / WebDAV / 收藏歌单：都要读回上次的选择并早于界面创建，
+    // 界面用 @StorageLink 订阅它们发布的值，晚了第一帧会拿到默认值
+    this.safeInit('PlaySettings', () => { PlaySettings.getInstance().init(this.context); });
+    this.safeInit('AppearanceSettings', () => { AppearanceSettings.getInstance().init(this.context); });
+    this.safeInit('DownloadSettings', () => { DownloadSettings.getInstance().init(this.context); });
+    this.safeInit('DownloadManager', () => { DownloadManager.getInstance().init(this.context); });
+    this.safeInit('WebDavSettings', () => { WebDavSettings.getInstance().init(this.context); });
+    this.safeInit('CollectedPlaylists', () => { CollectedPlaylists.getInstance().init(this.context); });
+  }
+
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    // 热启动路径：launchType 为默认 singleton，应用在后台被拉起时走 onNewWant。
+    // 与 onCreate 同一策略：隐式拉起由 skills 挡住，这里只记录不终止，
+    // 避免 AGC 审核拉起（action 可能为空/非 home）被误杀成启动闪退。
+    hilog.info(DOMAIN, 'testTag', 'Ability onNewWant, action: %{public}s',
+      want.action === undefined ? 'undefined' : want.action);
+    // 热启动无需重复初始化单例；仅记录拉起事件，供问题排查
   }
 
   onDestroy(): void {

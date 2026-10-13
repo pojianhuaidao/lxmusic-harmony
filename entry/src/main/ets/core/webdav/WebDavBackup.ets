@@ -161,7 +161,7 @@ export class WebDavBackup {
 // ------------------------------------------------------------------ 数据
 
 /** 构建备份数据：与安卓版同目录同账号，文件名带 hm 后缀；内容是鸿蒙版自己的音乐库 */
-function buildBackupPayload(): string {
+export function buildBackupPayload(): string {
   const library: LocalLibrary = LocalLibrary.getInstance();
   const payload: BackupPayload = {
     version: BACKUP_VERSION,
@@ -174,7 +174,7 @@ function buildBackupPayload(): string {
 }
 
 /** 解析备份并应用到本地库；@returns 恢复的数据条数（歌单数 + 歌曲数） */
-function applyBackupPayload(text: string): number {
+export function applyBackupPayload(text: string): number {
   const raw: BackupPayload | null = parseBackup(text);
   if (raw === null) {
     throw new Error('备份文件格式不对');
@@ -207,7 +207,7 @@ function parseBackup(text: string): BackupPayload | null {
   }
 }
 
-interface BackupPayload {
+export interface BackupPayload {
   version: number;
   time: number;
   type: string;

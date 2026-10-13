@@ -10,6 +10,7 @@ import { WebDavClient, WebDavCollectResult } from './WebDavClient';
 import { WebDavSettings } from './WebDavSettings';
 import { WebDavConfig, WebDavEntry, WebDavTags, WEBDAV_ID_PREFIX, WEBDAV_QUALITY,
   WEBDAV_SOURCE } from './WebDavTypes';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'WebDavLibrary';
@@ -167,7 +168,7 @@ export class WebDavLibrary implements SongSideTable {
     if (this.ready) {
       return;
     }
-    this.dir = `${context.filesDir}/${DIR_NAME}`;
+    this.dir = `${storageRootDir(context)}/${DIR_NAME}`;
     this.coverDir = `${this.dir}/${COVER_DIR}`;
     try {
       if (!fs.accessSync(this.dir)) {

@@ -1,6 +1,7 @@
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { storageRootDir } from '../common/StoragePaths';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'PlayStateStore';
@@ -21,7 +22,7 @@ export class PlayStateStore {
   private ready: boolean = false;
 
   init(context: common.Context): void {
-    this.file = `${context.filesDir}/${FILE_NAME}`;
+    this.file = `${storageRootDir(context)}/${FILE_NAME}`;
     this.ready = true;
   }
 

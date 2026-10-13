@@ -17,7 +17,6 @@ import {
   UpdateAlertData,
 } from './LxTypes';
 import { SourceStore, ActiveSource } from './SourceStore';
-import { SeedBuiltin } from './SeedBuiltin';
 import { MAX_SCRIPT_SIZE, buildSourceInfo, sourceMetaKey } from './LxMetadata';
 import { LxRequestHandle, LxRequestOptions, LxResponse, lxRequest } from './LxHttp';
 import { AppLog } from '../log/AppLog';
@@ -175,11 +174,6 @@ export class SourceEngine {
     if (this.store.isReady()) {
       this.dedupeStored();
     }
-    // 内置第三方音源注入（对应安卓版 seedBuiltin.ts）：必须在 restoreLastSource 之前，
-    // 保证「默认源回退」时列表里已有可加载的内置源
-    if (this.store.isReady()) {
-      SeedBuiltin.getInstance().seed(context, this);
-    }
     const decoder = util.TextDecoder.create('utf-8');
     const rm = context.resourceManager;
     this.utilsJs = decoder.decodeToString(rm.getRawFileContentSync('lx_utils.js'));
@@ -264,16 +258,7 @@ export class SourceEngine {
     return this.doImport(script);
   }
 
-  /**
-   * 内置音源注入专用（SeedBuiltin.seed 由 prepare 在 prepared=true 之前调用，
-   * importSource 的 prepared 检查会拦截所有内置源，导致真机"内置音源归零"）。
-   * 不检查 prepared，前置防御由 prepare() 的 `if (this.store.isReady())` 承担。
-   */
-  injectBuiltin(script: string): SourceInfo {
-    return this.doImport(script);
-  }
-
-  /** 导入核心逻辑（无 prepared 前置，供 importSource / injectBuiltin 共用） */
+  /** 导入核心逻辑（无 prepared 前置，供 importSource 使用） */
   private doImport(script: string): SourceInfo {
     if (script.length > MAX_SCRIPT_SIZE) {
       throw new Error('源脚本过大（超过 9MB）');
@@ -362,30 +347,6 @@ export class SourceEngine {
 
   listSources(): SourceInfo[] {
     return this.store.list();
-  }
-
-  /** 是否存在指定脚本（供 SeedBuiltin 做 hash/去重判定） */
-  hasScript(id: string): boolean {
-    return this.store.hasScript(id);
-  }
-
-  /** 读取指定音源脚本原文（供 SeedBuiltin 做 hash 清理判定） */
-  getScript(id: string): string {
-    return this.store.getScript(id);
-  }
-
-  /** 批量删除音源（对应 SeedBuiltin 清理已下线内置源） */
-  removeSources(ids: string[]): SourceInfo[] {
-    if (ids.length === 0) {
-      return this.store.list();
-    }
-    const remains: SourceInfo[] = this.store.remove(ids);
-    // 删掉的恰好是「上次加载的源」，把恢复记录一起清掉，免得下次启动去加载一个不存在的 id
-    const active: ActiveSource | null = this.store.loadActive();
-    if (active !== null && ids.includes(active.id)) {
-      this.store.clearActive();
-    }
-    return remains;
   }
 
   removeSource(id: string): SourceInfo[] {

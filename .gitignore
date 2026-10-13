@@ -36,3 +36,11 @@
 # ---------------------------------------------------------------- signing keys & build outputs (never commit)
 /key/
 /output/
+
+# ---------------------------------------------------------------- 本地构建日志/备份/AGC 敏感配置（不提交）
+/build_*.log
+*.bak
+/entry/oh-package_*.json5
+/entry/oh-package-lock.json5
+/temp/
+/entry/src/main/resources/rawfile/agconnect-services.json

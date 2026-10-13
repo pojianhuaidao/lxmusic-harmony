@@ -1,3 +1,7 @@
+# 版本号规则（与 AppScope/app.json5 顶部注释一致）：
+#   versionName = 1.MMDD.NN   （MMDD=构建月日，NN=当日序号，从 01 开始）
+#   versionCode = 1MMDDNN
+# AppScope/app.json5 为唯一版本源，本地与 CI 出包必须一致，不得各自修改。
 name: Build & Release (HAP + APP zip)
 
 on:
@@ -49,7 +53,8 @@ jobs:
         env:
           DEVECO_SDK_HOME: ${{ env.HOS_SDK_HOME }}
         run: |
-          node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default assembleHap --no-daemon
+          # 显式指定 release 构建模式：正式包走 release（关闭调试符号/不走 debug 分支）
+          node node_modules/@ohos/hvigor/bin/hvigor.js --mode module -p product=default -p buildMode=release assembleHap --no-daemon
 
       - name: Restore signing key from secrets
         env:

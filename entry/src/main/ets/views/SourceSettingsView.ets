@@ -8,9 +8,10 @@ import { MAX_SCRIPT_SIZE } from '../core/source/LxMetadata';
 import { ImportResolveTestResult, SourceInfo, SourceLog } from '../core/source/LxTypes';
 import { DEFAULT_MUSIC_INFO_JSON, formatTestResult, runOfflineSelfTest } from '../core/source/SourceTest';
 import { HdsListItemCard, IconSize, PrefixIcon, SuffixArrow, SuffixText } from '@kit.UIDesignKit';
-import { I_DISC } from '../ui/Icons';
+import { I_CLOCK, I_DISC, I_IMPORT, I_INFO, IconGlyph } from '../ui/Icons';
 import { SEARCH_PLATFORMS, isSearchSupported } from '../core/music/MusicSearch';
 import { C_BG, C_CARD, C_CHEVRON, C_DIVIDER, C_FILL_SOFT, C_FILL_SOFT_STRONG, C_ICON_GREEN, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_SECTION, F_SUB, R_CARD } from '../ui/Theme';
+import { HintText } from '../ui/SettingWidgets';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'SourceSettingsView';
@@ -180,15 +181,33 @@ export struct SourceSettingsView {
     }
   }
 
+  /** 图标 + 文字平铺的卡片标题行（与「播放设置」等设置页统一观感） */
   @Builder
-  sectionCard(title: string) {
-    Text(title)
-      .fontSize(F_SECTION)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(C_TEXT)
-      .width('100%')
-      .textAlign(TextAlign.Start)
-      .padding({ left: 4, bottom: 8 })
+  cardTitle(icon: Resource, title: string, trailing: string) {
+    Row({ space: 8 }) {
+      Stack({ alignContent: Alignment.Center }) {
+        Column()
+          .width(30)
+          .height(30)
+          .borderRadius(15)
+          .backgroundColor(C_FILL_SOFT)
+        IconGlyph({ symbol: icon, iconSize: 17, color: C_TEXT })
+      }
+      .width(30)
+      .height(30)
+      Text(title)
+        .fontSize(15)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(C_TEXT)
+        .layoutWeight(1)
+        .textAlign(TextAlign.Start)
+      if (trailing.length > 0) {
+        Text(trailing)
+          .fontSize(F_SUB)
+          .fontColor(C_TEXT_WEAK)
+      }
+    }
+    .width('100%')
   }
 
   build() {
@@ -207,8 +226,8 @@ export struct SourceSettingsView {
             .padding({ left: 4 })
 
           // ------------------------------------------------ 导入音源
-          this.sectionCard('导入音源')
           Column({ space: 10 }) {
+            this.cardTitle(I_IMPORT, '导入音源', '')
             TextArea({
               text: this.sourceInput,
               placeholder: '粘贴音源脚本链接，例如 https://example.com/lx-source.js',
@@ -248,15 +267,21 @@ export struct SourceSettingsView {
           .padding(14)
           .borderRadius(R_CARD)
           .backgroundColor(C_CARD)
+          HintText({ text: '粘贴音源脚本链接（在线拉取）或脚本正文，也可从本地文件导入；导入成功后自动加载。' })
 
           // ------------------------------------------------ 已导入音源
-          this.sectionCard('已导入音源')
           Column({ space: 10 }) {
+            this.cardTitle(I_DISC, '已导入音源', this.sources.length > 0 ? `${this.sources.length} 个` : '')
             if (this.sources.length === 0) {
-              Text('还没有导入任何音源')
-                .fontSize(F_SUB)
-                .fontColor(C_TEXT_WEAK)
-                .padding(16)
+              Column() {
+                Text('还没有导入任何音源')
+                  .fontSize(F_SUB)
+                  .fontColor(C_TEXT_WEAK)
+              }
+              .width('100%')
+              .padding(14)
+              .borderRadius(R_CARD)
+              .backgroundColor(C_CARD)
             }
             ForEach(this.sources, (item: SourceInfo) => {
               Column({ space: 8 }) {
@@ -318,8 +343,8 @@ export struct SourceSettingsView {
           .width('100%')
 
           // ------------------------------------------------ 运行状态
-          this.sectionCard('运行状态')
           Column({ space: 10 }) {
+            this.cardTitle(I_INFO, '运行状态', '')
             this.infoLine('已声明平台', this.supportedText)
             Divider().strokeWidth(0.6).color(C_DIVIDER)
             this.infoLine('沙箱环境', `lx.env = ${this.sandboxEnv}`)
@@ -359,10 +384,11 @@ export struct SourceSettingsView {
           .padding(14)
           .borderRadius(R_CARD)
           .backgroundColor(C_CARD)
+          HintText({ text: '兼容模式在移动端 / 桌面端沙箱之间切换；离线自检用于排查导入的脚本能否正常解析。' })
 
-          // ------------------------------------------------ 日志
-          this.sectionCard('引擎日志')
+          // ------------------------------------------------ 引擎日志
           Column({ space: 3 }) {
+            this.cardTitle(I_CLOCK, '引擎日志', this.logs.length > 0 ? `${this.logs.length} 条` : '')
             if (this.logs.length === 0) {
               Text('暂无日志')
                 .fontSize(11.5)
@@ -381,6 +407,7 @@ export struct SourceSettingsView {
           .padding(14)
           .borderRadius(R_CARD)
           .backgroundColor(C_CARD)
+
         }
         .width('100%')
         .padding({ left: 16, right: 16, bottom: this.bottomInset + 20 })
