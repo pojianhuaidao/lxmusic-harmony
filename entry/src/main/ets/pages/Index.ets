@@ -47,6 +47,8 @@ import { SourceSettingsView } from '../views/SourceSettingsView';
 import { CacheSettingsView } from '../views/CacheSettingsView';
 import { PlaySettingsView } from '../views/PlaySettingsView';
 import { DownloadSettingsView } from '../views/DownloadSettingsView';
+import { UserAgreement, K_AGREEMENT_ACCEPTED } from '../core/settings/UserAgreement';
+import { UserAgreementDialog } from '../views/UserAgreementDialog';
 import { PlaylistSummary } from '../core/player/PlaySession';
 import { K_SELECT_ACTIVE, K_SELECT_ALL, K_SELECT_COUNT, SelectSession } from '../ui/Selection';
 
@@ -125,6 +127,8 @@ struct Index {
   @State topInset: number = 0;
   @State bottomInset: number = 0;
   @State toast: string = '';
+  /** 首启协议：false = 未同意，主界面被协议遮罩盖住（EntryAbility 启动时已读回） */
+  @StorageLink(K_AGREEMENT_ACCEPTED) agreementAccepted: boolean = false;
   /** 歌单详情页当前打开的歌单（路由参数只收 Object，这里直接由壳层持有更省事） */
   @State routePlaylistId: string = '';
   @State routePlaylistName: string = '歌单';
@@ -1370,6 +1374,21 @@ struct Index {
       // ---------------------------------------------------- 删除粒子飘散
       // 全局唯一的一层：任何页面删除时调 dustBus.spray(x, y)，粒子就在那里散开
       DustLayer()
+
+      // ---------------------------------------------------- 首启用户协议 / 隐私政策
+      // 未同意时整屏盖住主界面（含状态栏/导航条区域）：同意后 UserAgreement.accept()
+      // 落盘并发布，@StorageLink 状态变 true，本遮罩随即从界面树移除，
+      // 后续启动 EntryAbility 读回同意状态，不再展示。
+      if (!this.agreementAccepted) {
+        UserAgreementDialog({
+          onAccept: () => {
+            UserAgreement.getInstance().accept();
+          },
+          onDecline: () => {
+            this.showToast('需同意用户协议与隐私政策后才能使用本应用');
+          },
+        })
+      }
     }
     .width('100%')
     .height('100%')

@@ -51,7 +51,7 @@ if (-not (Test-Path $hvigorJs)) {
 }
 if (-not $hvigorJs) { Write-Error "hvigor.js not found. Install DevEco Studio first." }
 
-$p12 = Join-Path $KeyDir "lxmusic.p12"
+$p12 = Join-Path $KeyDir "music.p12"
 $cerItem = Get-ChildItem $KeyDir -Filter "*.cer" | Select-Object -First 1
 $p7bItem = Get-ChildItem $KeyDir -Filter "*.p7b" | Select-Object -First 1
 if (-not $cerItem) { Write-Error "Missing .cer file in $KeyDir (see key\KEY.txt)" }

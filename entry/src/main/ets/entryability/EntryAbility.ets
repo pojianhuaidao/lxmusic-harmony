@@ -18,6 +18,7 @@ import { PlaySettings } from '../core/settings/PlaySettings';
 import { AppearanceSettings } from '../core/settings/AppearanceSettings';
 import { DownloadSettings } from '../core/download/DownloadSettings';
 import { DownloadManager } from '../core/download/DownloadManager';
+import { UserAgreement } from '../core/settings/UserAgreement';
 
 const DOMAIN = 0x0000;
 
@@ -78,6 +79,9 @@ export default class EntryAbility extends UIAbility {
     this.safeInit('AppearanceSettings', () => { AppearanceSettings.getInstance().init(this.context); });
     this.safeInit('DownloadSettings', () => { DownloadSettings.getInstance().init(this.context); });
     this.safeInit('DownloadManager', () => { DownloadManager.getInstance().init(this.context); });
+    // 首启用户协议：读回同意状态并发布 AppStorage，早于界面创建，
+    // 界面第一帧就能拿到「是否要盖协议遮罩」（见 Index 的 K_AGREEMENT_ACCEPTED）
+    this.safeInit('UserAgreement', () => { UserAgreement.getInstance().init(this.context); });
     this.safeInit('WebDavSettings', () => { WebDavSettings.getInstance().init(this.context); });
     this.safeInit('CollectedPlaylists', () => { CollectedPlaylists.getInstance().init(this.context); });
   }

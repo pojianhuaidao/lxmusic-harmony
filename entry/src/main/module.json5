@@ -34,6 +34,21 @@
       // （自动生成的调试 Profile 里没有，声明了也只是摆设，还会卡住 AGC 上传时的
       // 「ACL 权限声明一致性」校验）。而下载真正写文件走的是系统保存对话框
       // （DocumentViewPicker.save），那条路本来就不需要这个权限，见 openTarget。
+      //
+      // 关于「公共 Download 目录写权限」的两种候选方案（下载功能待办）：
+      //   - 方案 A：声明受限 ACL 权限 ohos.permission.READ_WRITE_DOWNLOAD_DIRECTORY。
+      //     不可行：受限 ACL 权限必须在签名 Profile 的 allowed-acls 中显式授权才能
+      //     真正生效，本工程签名证书已申请吊销、无法生成带 allowed-acls 的 Profile；
+      //     即使未来恢复签名，声明受限权限还会卡 AGC 上传的「ACL 权限声明一致性」
+      //     校验，需额外走受限权限申请/审核。故不在本文件声明。
+      //   - 方案 B：Picker 授权路径（选定方案）。DownloadManager 使用系统保存对话框
+      //     的 DOWNLOAD 模式（DocumentViewPicker.save + DocumentPickerMode.DOWNLOAD），
+      //     系统返回公共 Download/<包名>/ 目录 uri（自带持久化授权），应用拼文件名建
+      //     文件，无需任何静态权限声明，兼容 API 12 起的全部手机/平板。已实现于
+      //     DownloadManager.openViaPicker，设置页「下载目录」显示的就是该目录。
+      //   - 应用数据根目录（LxMusicData）仍以直接读写公共 Download 目录为主、失败回退
+      //     filesDir，见 core/common/StoragePaths.ets：写权限最终由签名 Profile 授权
+      //     决定，try/catch 回退保证不因权限缺失而崩。
     ],
     "abilities": [
       {

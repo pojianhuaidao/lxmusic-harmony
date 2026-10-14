@@ -11,6 +11,14 @@ import { fileIo as fs } from '@kit.CoreFileKit';
  * 需上架申请；本工程未申请，运行期由系统决定是否授权）。这里先尝试直接读写公共目录
  * （能建目录即视为可用），失败则回退应用私有目录，保证功能不因权限缺失而崩。
  *
+ * 权限方案说明（下载功能待办）：受限 ACL 权限（READ_WRITE_DOWNLOAD_DIRECTORY /
+ * FILE_ACCESS_PERSIST）必须在签名 Profile 的 allowed-acls 里授权才生效，本工程签名
+ * 证书已吊销、无法出带授权 Profile，故源码级一律不声明受限权限（见 module.json5）。
+ * 下载文件写入公共 Download 目录走系统保存对话框 DOWNLOAD 模式（Picker 通路，
+ * DownloadManager.openViaPicker），本路径仅负责应用数据根目录。另：当前 SDK 的
+ * fileIo 模块没有 fs.getDownloadDirectory()（API 12 环境不存在该函数），源码级只能
+ * 用下方已知路径探测，取不到时回退私有沙箱。
+ *
  * 华为账号备份（core/account/HuaweiAccount）把备份文件写在这个根目录下的
  * huawei_backup 子目录，作为「华为远端数据」的端侧镜像，与页面层同一套数据链路。
  */

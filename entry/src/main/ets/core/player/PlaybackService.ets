@@ -16,7 +16,7 @@ const TAG: string = 'PlaybackService';
 /** 会话标签：系统里标识本应用的媒体会话 */
 const SESSION_TAG: string = 'lx_music';
 /** 媒体卡 / 长时任务点回本应用时打开的 ability */
-const BUNDLE_NAME: string = 'music.hm.o';
+const BUNDLE_NAME: string = 'music.hm.op';
 const ABILITY_NAME: string = 'EntryAbility';
 /** 进度回写节流：AVPlayer 的 timeUpdate 是 100ms 一次，锁屏进度条用不到这么密 */
 const POSITION_INTERVAL_MS: number = 1000;
