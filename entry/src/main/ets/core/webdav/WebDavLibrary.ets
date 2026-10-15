@@ -858,7 +858,11 @@ export class WebDavLibrary implements SongSideTable {
         hilog.error(DOMAIN, TAG, 'parse index failed: %{public}s', JSON.stringify(e));
       }
     }
-    this.sweepOrphans();
+    // 孤儿清扫要全目录 listFileSync + statSync 逐项核对，量大时能把冷启动主线程卡住
+    // （AGC AppFreeze THREAD_BLOCK_6S）；索引本身已就绪，清扫挪到首帧后执行无感知
+    setTimeout(() => {
+      this.sweepOrphans();
+    }, 0);
   }
 
   /**

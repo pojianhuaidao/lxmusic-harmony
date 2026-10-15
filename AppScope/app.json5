@@ -11,9 +11,9 @@
   "app": {
     "bundleName": "music.hm.op",
     "vendor": "example",
-    "versionCode": 1101401,
-    "versionName": "1.1014.01",
-    "buildVersion": "1101401",
+    "versionCode": 1101501,
+    "versionName": "1.1015.01",
+    "buildVersion": "1101501",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }

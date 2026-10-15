@@ -78,6 +78,8 @@ export const K_HISTORY_VERSION: string = 'ps_history_version';
  * 让 MiniBar 的内容组件自己订阅（不依赖 builder 是否被重新调用）。
  */
 export const K_MINI_EXPANDED: string = 'ps_mini_expanded';
+/** 通知栏媒体卡 / 系统拉起应用后要求直达播放页的标志（EntryAbility 写、Index 消费） */
+export const K_OPEN_PLAYER_PENDING: string = 'ps_open_player_pending';
 /** 当前这首歌的歌词（LyricLine[]，由源的 lyric action 解析而来） */
 export const K_LYRIC_LINES: string = 'ps_lyric_lines';
 /** 歌词状态：none（没有/音源不支持）/ loading / ready */

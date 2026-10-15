@@ -87,7 +87,7 @@ export struct PanePage {
     const side: number = barSideMarginFor(this.windowWidth);
     const style: FloatingTabBarStyle = {
       barSideMargin: side,
-      barBottomMargin: this.bottomInset + PAGE_BAR_BOTTOM_GAP,
+      barBottomMargin: Math.max(28, this.bottomInset) + PAGE_BAR_BOTTOM_GAP,
       systemMaterial: immersiveMaterialForBar(this.materialLevel),
     };
     // 宽度必须显式给（否则框架按自己的默认宽度画，内容会被挤在一条窄胶囊里）：
@@ -125,6 +125,7 @@ export struct PanePage {
       // 栏体那一条不要自己的底色（默认是一条灰白带）：观感全交给悬浮胶囊本身
       .barBackgroundColor(Color.Transparent)
       // 已移除 .barFloatingStyle()：API 26.0.0 新增，HarmonyOS 6.1(23) 设备不存在该 API，调用即抛 undefined is not callable（JsCrash PanePage.ts:241:18），降级默认栏样式
+      // （barStyle 同为 API 26 接口，同样不可用；底部避让由 Tabs 外层 expandSafeArea + bottomInset padding 保证，见 build() 注释）
       .width('100%')
       .height('100%')
     }

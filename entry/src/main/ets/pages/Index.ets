@@ -5,7 +5,8 @@ import { SymbolGlyphModifier, window } from '@kit.ArkUI';
 import { BlurStrategy, HdsBarStyle, HdsNavigation, HdsNavigationTitleBarOptions, HdsNavigationTitleMode,
   HdsNavDestination, HdsTabs, HdsTabsController, HdsTitleBarContentStyle,
   TitleBarStyleOptions, TitleSize } from '@kit.UIDesignKit';
-import { K_CURRENT_ID, K_MINI_EXPANDED, K_QUEUE_COUNT, K_STATUS_TEXT, PlaySession, SongItem } from '../core/player/PlaySession';
+import { K_CURRENT_ID, K_MINI_EXPANDED, K_OPEN_PLAYER_PENDING, K_QUEUE_COUNT, K_STATUS_TEXT,
+  PlaySession, SongItem } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
 import { WebDavLibrary } from '../core/webdav/WebDavLibrary';
 import { SourceEngine } from '../core/source/SourceEngine';
@@ -142,6 +143,8 @@ struct Index {
   @State accountOpen: boolean = false;
   @StorageLink(K_ACCOUNT_UID) accountUid: string = '';
   @StorageLink(K_CURRENT_ID) currentId: string = '';
+  /** 通知栏媒体卡 / 系统拉起后待直达播放页：EntryAbility 置位，这里消费并清掉 */
+  @StorageLink(K_OPEN_PLAYER_PENDING) @Watch('onOpenPlayerPendingChanged') openPlayerPending: boolean = false;
   @StorageLink(K_STATUS_TEXT) statusText: string = '';
   @StorageLink(K_QUEUE_COUNT) queueCount: number = 0;
   /**
@@ -225,6 +228,29 @@ struct Index {
     PlaySession.getInstance().setNoticeListener(this.noticeListener);
 
     this.setupWindow();
+    // 通知栏媒体卡 / 系统拉起（冷启动）：bootstrap 已恢复现场，这里消费一次
+    this.consumeOpenPlayerPending();
+  }
+
+  /**
+   * 通知栏媒体卡 / 系统拉起后直达播放页
+   *
+   * 条件：确实有正在播放/暂停的歌曲（K_CURRENT_ID 非空）才弹播放器；
+   * 没有歌（普通外部拉起、无播放现场）就留在当前页。消费后立即清标志。
+   */
+  private consumeOpenPlayerPending(): void {
+    if (!this.openPlayerPending) {
+      return;
+    }
+    AppStorage.setOrCreate(K_OPEN_PLAYER_PENDING, false);
+    this.openPlayerPending = false;
+    if (this.currentId.length > 0) {
+      this.openPlayer();
+    }
+  }
+
+  private onOpenPlayerPendingChanged(): void {
+    this.consumeOpenPlayerPending();
   }
 
   aboutToDisappear(): void {
@@ -454,10 +480,11 @@ struct Index {
   /**
    * 悬浮页签栏离屏幕底边的距离（vp）
    *
-   * 照派音：压着导航条避让区，但至少留 16。
+   * 照派音：压着导航条避让区。AGC 上架检验要求底部控件距底 ≥ 28vp
+   * （HarmonyOS 6.1 平板导航条），故下限从 16 提到 28；手势条更高时跟随。
    */
   private homeTabBarBottomMarginVp(): number {
-    return Math.max(16, this.bottomInset);
+    return Math.max(28, this.bottomInset);
   }
 
   /**
@@ -1204,6 +1231,9 @@ struct Index {
     Stack({ alignContent: Alignment.Bottom }) {
       // ---------------------------------------------------- HDS 导航（主页签 + 子页面）
       HdsNavigation(this.pathStack) {
+        // 壳层页签栏整体抬高（仅作用于 HdsTabs 这一棵子树，不影响路由压栈的子页面）：
+        // 底部悬浮页签栏底部距屏幕底 ≥ 28vp，避让系统导航条（AGC 上架检验问题A）
+        Column() {
         HdsTabs({ index: this.activeTab, controller: this.tabsController, barPosition: BarPosition.End }) {
           // 页签内容是「宽屏收成居中一列、手机铺满」：收窄交给 WidePane，见 ui/Widgets.ets
           TabContent() {
@@ -1271,7 +1301,12 @@ struct Index {
         })
         .width('100%')
         .height('100%')
-      }
+        }
+        }
+        .width('100%')
+        .height('100%')
+        // 底部页签栏整体抬高 ≥28vp（导航条避让，见上面 Column 内注释）
+        .padding({ bottom: this.homeTabBarBottomMarginVp() })
       // 首页也是有标题栏的：页头（大标题 + 那几个圆钮）就画在标题栏的 stackBuilder 里，
       // 沉浸光感才生效（见 homeTitleBar 的说明）
       .titleBar(this.homeTitleBar())
@@ -1323,6 +1358,32 @@ struct Index {
 
       // 播放列表是系统的半模态：bindSheet 挂在最外层 Stack 上（见文件末尾）
 
+      // ---------------------------------------------------- 主页常驻迷你播放条（AGC 问题C）
+      // 主页面被三页签占住、迷你条只在子页面/设置页出现 —— 这里在壳层叠一条常驻胶囊：
+      // 与页签栏同一套避让口径（底距 ≥28vp），再往上让出 HDS_BAR_HEIGHT + 10 悬在页签栏
+      // 正上方；内容与子页面同一份 MiniBarView（forceExpanded 恒展开，窄屏/宽屏都可点）。
+      // 首页无歌时也常驻显示（组件内部对空态有兜底封面与文案），点击信息区进全屏播放器。
+      Row() {
+        MiniBarView({
+          windowWidth: this.windowWidth,
+          forceExpanded: true,
+          onOpenPlayer: () => {
+            this.openPlayer();
+          },
+          onOpenQueue: () => {
+            this.openQueue();
+          },
+        })
+      }
+      .width(this.floatingBarSmallWidthVp())
+      .height(HDS_BAR_HEIGHT)
+      .borderRadius(HDS_BAR_HEIGHT / 2)
+      .clip(true)
+      // 内容区自绘玻璃（内容区不构成系统材质，见 ui/Glass.ets 说明）
+      .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+      .align(Alignment.Bottom)
+      .margin({ bottom: this.homeTabBarBottomMarginVp() + HDS_BAR_HEIGHT + 10 })
+
       // ---------------------------------------------------- 状态提示
       if (this.toast.length > 0) {
         Column() {
@@ -1339,9 +1400,9 @@ struct Index {
         // 底色是 token：深色模式下换成深色半透明底，不然白底黑字会一直亮着
         .attributeModifier(thinGlass(18, false, C_GLASS_SOLID, this.materialLevel))
         .systemMaterial(immersiveMaterialFor(this.materialLevel))
-        // 压在底部迷你栏 / 页签栏之上：顶部在子页面里是标题栏与返回键的位置，别挡着
+        // 压在常驻迷你播放条之上（迷你条底距 ≥28、高 56、页签栏再上 10，这里整体再留 18）
         .align(Alignment.Bottom)
-        .margin({ left: 16, right: 16, bottom: this.bottomInset + 92 })
+        .margin({ left: 16, right: 16, bottom: this.homeTabBarBottomMarginVp() + HDS_BAR_HEIGHT * 2 + 18 })
         .transition(TransitionEffect.OPACITY.animation({ duration: 200 }))
       }
 

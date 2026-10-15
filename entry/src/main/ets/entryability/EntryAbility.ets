@@ -6,7 +6,7 @@ import { util } from '@kit.ArkTS';
 import { window, display } from '@kit.ArkUI';
 import { initialize as agConnectInitialize, JsonTypeInfo } from '@hw-agconnect/hmcore';
 import { PlaybackService } from '../core/player/PlaybackService';
-import { PlaySession } from '../core/player/PlaySession';
+import { PlaySession, K_OPEN_PLAYER_PENDING } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
 import { WebDavLibrary } from '../core/webdav/WebDavLibrary';
 import { WebDavSettings } from '../core/webdav/WebDavSettings';
@@ -47,6 +47,8 @@ export default class EntryAbility extends UIAbility {
     if (want.action !== 'ohos.want.action.home') {
       hilog.info(DOMAIN, 'testTag', 'launched with action: %{public}s',
         want.action === undefined ? 'undefined' : want.action);
+      // 外部拉起（含通知栏媒体卡冷启动）：标记待直达播放页，Index 在 aboutToAppear 里消费
+      AppStorage.setOrCreate(K_OPEN_PLAYER_PENDING, true);
     }
     // AGC 初始化：读取 rawfile 的 agconnect-services.json 并初始化核心 SDK
     // （华为账号授权 auth.signIn 依赖此初始化；失败只记日志，不阻断应用启动）
@@ -72,18 +74,25 @@ export default class EntryAbility extends UIAbility {
     this.safeInit('SyncManager', () => { SyncManager.getInstance().init(this.context); });
     // 缓存：元数据（播放地址 / 歌词）与播放缓存都要沙箱目录
     this.safeInit('MediaCache', () => { MediaCache.getInstance().init(this.context); });
-    this.safeInit('AudioCache', () => { AudioCache.getInstance().init(this.context); });
-    // 播放 / 外观 / 下载 / WebDAV / 收藏歌单：都要读回上次的选择并早于界面创建，
-    // 界面用 @StorageLink 订阅它们发布的值，晚了第一帧会拿到默认值
+    // 播放 / 外观：都要读回上次的选择并早于界面创建，界面用 @StorageLink 订阅它们发布的值
     this.safeInit('PlaySettings', () => { PlaySettings.getInstance().init(this.context); });
     this.safeInit('AppearanceSettings', () => { AppearanceSettings.getInstance().init(this.context); });
-    this.safeInit('DownloadSettings', () => { DownloadSettings.getInstance().init(this.context); });
-    this.safeInit('DownloadManager', () => { DownloadManager.getInstance().init(this.context); });
     // 首启用户协议：读回同意状态并发布 AppStorage，早于界面创建，
     // 界面第一帧就能拿到「是否要盖协议遮罩」（见 Index 的 K_AGREEMENT_ACCEPTED）
     this.safeInit('UserAgreement', () => { UserAgreement.getInstance().init(this.context); });
-    this.safeInit('WebDavSettings', () => { WebDavSettings.getInstance().init(this.context); });
-    this.safeInit('CollectedPlaylists', () => { CollectedPlaylists.getInstance().init(this.context); });
+    // 重 IO 模块挪到首帧之后分批执行（AGC 上架检验 AppFreeze THREAD_BLOCK_6S）：
+    // 下载索引 / 播放缓存对账要读大 JSON、逐项校验文件存在、全目录清扫，量大了能卡主线程
+    // 数秒；这批都不参与首帧渲染（下载页 / 缓存设置页才消费），首帧后跑完全来得及。
+    // 第一帧拿到的是各自默认值（下载列表空 / 缓存未启用），页面真正展示前早已就绪。
+    setTimeout(() => {
+      this.safeInit('AudioCache', () => { AudioCache.getInstance().init(this.context); });
+      this.safeInit('DownloadManager', () => { DownloadManager.getInstance().init(this.context); });
+    }, 0);
+    setTimeout(() => {
+      this.safeInit('DownloadSettings', () => { DownloadSettings.getInstance().init(this.context); });
+      this.safeInit('WebDavSettings', () => { WebDavSettings.getInstance().init(this.context); });
+      this.safeInit('CollectedPlaylists', () => { CollectedPlaylists.getInstance().init(this.context); });
+    }, 0);
   }
 
   onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
@@ -92,6 +101,8 @@ export default class EntryAbility extends UIAbility {
     // 避免 AGC 审核拉起（action 可能为空/非 home）被误杀成启动闪退。
     hilog.info(DOMAIN, 'testTag', 'Ability onNewWant, action: %{public}s',
       want.action === undefined ? 'undefined' : want.action);
+    // 通知栏媒体卡 / 系统拉起（热启动）：标记待直达播放页，Index 的 @Watch 会消费
+    AppStorage.setOrCreate(K_OPEN_PLAYER_PENDING, true);
     // 热启动无需重复初始化单例；仅记录拉起事件，供问题排查
   }
 

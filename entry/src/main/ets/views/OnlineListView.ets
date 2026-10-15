@@ -876,7 +876,7 @@ export struct OnlineListView {
     const side: number = barSideMarginFor(this.windowWidth);
     const style: FloatingTabBarStyle = {
       barSideMargin: side,
-      barBottomMargin: this.bottomInset + PAGE_BAR_BOTTOM_GAP,
+      barBottomMargin: Math.max(28, this.bottomInset) + PAGE_BAR_BOTTOM_GAP,
       maskColor: PAGE_BAR_MASK_COLOR,
       maskHeight: PAGE_BAR_MASK_HEIGHT,
       systemMaterial: immersiveMaterialForBar(this.materialLevel),
@@ -1027,8 +1027,8 @@ export struct OnlineListView {
       .barHeight(HDS_BAR_HEIGHT)
       // 栏体那一条不要自己的底色（默认是一条灰白带）：观感全交给悬浮胶囊本身
       .barBackgroundColor(Color.Transparent)
-      // barFloatingStyle 为 API 26.0.0 新增接口，低于该版本的系统（如 HarmonyOS 6.1 设备）运行时
-      // 不存在此方法，调用会抛 "undefined is not callable" 导致 JsCrash，故移除，降级为系统默认悬浮栏样式
+      // 已移除 .barFloatingStyle()：API 26.0.0 新增，HarmonyOS 6.1(23) 设备不存在该 API，调用即抛 undefined is not callable（JsCrash OnlineListView.ts:1574:18），降级默认栏样式
+      // （barStyle 同为 API 26 接口，同样不可用；底部避让由 Tabs 外层 expandSafeArea + bottomInset padding 保证）
       .width('100%')
       .height('100%')
     }

@@ -209,9 +209,7 @@ export struct DownloadListPane {
           fontColor: C_RED,
           action: () => {
             const manager = DownloadManager.getInstance();
-            for (const item of targets) {
-              manager.remove(item.key);
-            }
+            manager.removeBatch(targets.map((item: DownloadItem) => item.key));
             this.exitSelecting();
             this.refresh();
             this.toast(`已删除 ${targets.length} 条`);

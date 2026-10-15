@@ -440,6 +440,64 @@ export class DownloadManager {
     this.bump();
   }
 
+  /**
+   * 批量删除多条记录（正在下的先取消；已下载的文件一并删掉）
+   *
+   * 与逐条 remove 的区别：文件删除、索引删除、状态通知全部合并到一轮，
+   * 只 persist 一次、只 bump 一次 —— 几百条一起删时不会触发几百次 UI 刷新，
+   * 也不会在循环里反复重建数组（O(n²)），避免列表长时删除闪退。
+   */
+  removeBatch(keys: string[]): number {
+    if (keys.length === 0) {
+      return 0;
+    }
+    const targets: DownloadItem[] = [];
+    const doomed: Set<string> = new Set();
+    for (const key of keys) {
+      const item: DownloadItem | null = this.stateOf(key);
+      if (item !== null) {
+        targets.push(item);
+        doomed.add(item.key);
+      }
+    }
+    if (targets.length === 0) {
+      return 0;
+    }
+    // 1) 取消下载中请求 + 删除磁盘文件 + 摘索引：全部合并到一个循环里
+    for (const item of targets) {
+      const request: http.HttpRequest | undefined = this.requests.get(item.key);
+      if (request !== undefined) {
+        // 先改状态再销毁请求：下载协程收尾时会看到「已不是 downloading」，
+        // 直接丢掉 .part，不会去 rename 或往列表里写一条已经删掉的记录
+        item.status = 'error';
+        item.error = '已取消';
+        this.requests.delete(item.key);
+        try {
+          request.destroy();
+        } catch (e) {
+          // 已经结束的请求 destroy 报错无所谓
+        }
+      }
+      if (item.uri.length > 0) {
+        this.unlinkQuietly(item.uri);
+        this.unlinkQuietly(`${item.uri}${PART_SUFFIX}`);
+      }
+      removeDownloadedFile(item.key);
+    }
+    // 2) 一次性过滤列表（只重建一次）
+    const next: DownloadItem[] = [];
+    for (const one of this.items) {
+      if (!doomed.has(one.key)) {
+        next.push(one);
+      }
+    }
+    this.items = next;
+    // 3) 只落一次盘、只通知一次
+    this.persist();
+    this.bump();
+    return targets.length;
+  }
+
   /** 清空已完成 / 失败的记录（正在下的留着） */
   clearFinished(): number {
     const kept: DownloadItem[] = [];

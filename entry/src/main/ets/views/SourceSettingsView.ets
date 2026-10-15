@@ -453,7 +453,8 @@ export struct SourceSettingsView {
     }
     try {
       const options: picker.DocumentSelectOptions = new picker.DocumentSelectOptions();
-      options.maxSelectNumber = 1;
+      // 一次可选多个音源脚本（上限 20 个）：逐个导入，单个失败跳过不影响其他文件
+      options.maxSelectNumber = 20;
       options.fileSuffixFilters = ['音源脚本 (.js)|.js'];
       const documentPicker: picker.DocumentViewPicker = new picker.DocumentViewPicker(this.getContext());
       documentPicker.select(options)
@@ -461,7 +462,7 @@ export struct SourceSettingsView {
           if (uris.length === 0) {
             return;
           }
-          void this.importSourceFile(uris[0]);
+          void this.importSourceFiles(uris);
         })
         .catch((err: BusinessError) => {
           // 用户取消也走这里（错误码里带 cancel），不当成失败提示
@@ -473,26 +474,72 @@ export struct SourceSettingsView {
     }
   }
 
-  private async importSourceFile(uri: string): Promise<void> {
+  /**
+   * 导入单个音源脚本文件
+   *
+   * 成功返回空串，失败返回失败原因（不抛错）—— 批量导入时单个失败直接跳过继续。
+   * 注意 loadSource 内部会自己复位 busy，批量循环里由 importSourceFiles 每轮补回。
+   */
+  private async importSourceFile(uri: string): Promise<string> {
     const name: string = fileNameOf(uri);
     this.busy = true;
     this.status = `正在读取「${name}」…`;
     try {
       const text: string = readScriptFile(uri);
       if (text.trim().length === 0) {
-        this.status = `「${name}」是空文件，没有可导入的脚本`;
-        return;
+        return `「${name}」是空文件，没有可导入的脚本`;
       }
       const info: SourceInfo = SourceEngine.getInstance().importSource(text);
       this.status = `已导入「${info.name}」，正在初始化沙箱…`;
       this.refreshSources();
       // 加载这一步自己管 busy 与状态文案，与「导入并加载」共用
       await this.loadSource(info.id);
+      return '';
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'import source file failed (%{public}s): %{public}s', name, JSON.stringify(e));
-      this.status = `导入文件「${name}」失败: ${(e as Error).message}`;
+      return `${(e as Error).message}`;
     } finally {
       this.busy = false;
+    }
+  }
+
+  /**
+   * 批量导入多个音源脚本（文件选择器多选结果）
+   *
+   * 逐个导入：单个失败跳过继续，全部结束后弹出导入结果汇总（成功 x 个 / 失败 y 个及原因）。
+   */
+  private async importSourceFiles(uris: string[]): Promise<void> {
+    if (this.busy || uris.length === 0) {
+      return;
+    }
+    this.busy = true;
+    const okNames: string[] = [];
+    const failLines: string[] = [];
+    for (let i = 0; i < uris.length; i++) {
+      const name: string = fileNameOf(uris[i]);
+      this.status = `正在导入 ${i + 1}/${uris.length}「${name}」…`;
+      const error: string = await this.importSourceFile(uris[i]);
+      // loadSource 的 finally 会把 busy 复位：下一轮前补回，避免批量处理中途被打断
+      this.busy = true;
+      if (error.length === 0) {
+        okNames.push(name);
+      } else {
+        failLines.push(`「${name}」：${error}`);
+      }
+    }
+    this.busy = false;
+    if (failLines.length > 0) {
+      this.status = `导入完成：成功 ${okNames.length} 个，失败 ${failLines.length} 个`;
+      this.getUIContext().showAlertDialog({
+        title: '音源导入结果',
+        message: `成功导入 ${okNames.length} 个音源，${failLines.length} 个失败。\n\n失败原因：\n${failLines.join('\n')}`,
+        autoCancel: true,
+        buttons: [
+          { value: '知道了', action: () => { } },
+        ],
+      });
+    } else {
+      this.status = `已导入 ${okNames.length} 个音源，全部成功`;
     }
   }
 }
