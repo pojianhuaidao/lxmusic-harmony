@@ -94,6 +94,8 @@ if (-not $SkipBuild) {
     Write-Host "==> building official HAP + APP (version $ver) ..."
     Push-Location $Root
     try {
+        # 先 clean 再全量构建：规避 hvigor 增量缓存把打包判 up-to-date 导致版本号仍是旧包
+        node $hvigorJs clean --no-daemon
         node $hvigorJs -p product=default -p buildMode=release assembleApp --no-daemon
     } finally {
         Pop-Location

@@ -178,7 +178,7 @@ export class HuaweiAccount {
         fs.readSync(file.fd, buffer);
         fs.closeSync(file);
         const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-        const raw = JSON.parse(decoder.decodeToString(buffer)) as AccountRecord;
+        const raw = JSON.parse(decoder.decodeToString(new Uint8Array(buffer))) as AccountRecord;
         if (raw !== null && raw !== undefined && raw.uid.length > 0) {
           localUid = raw.uid;
           localName = raw.name;
@@ -349,7 +349,7 @@ export class HuaweiAccount {
         hilog.warn(DOMAIN, TAG, 'remove hw restore cache failed: %{public}s', (e as Error).message);
       }
       const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-      const applied: number = applyBackupPayload(decoder.decodeToString(buffer), context);
+      const applied: number = applyBackupPayload(decoder.decodeToString(new Uint8Array(buffer)), context);
       return { ok: true, message: `已从华为云端恢复（${applied} 条数据）` };
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'hw cloud restore failed, fallback to local mirror: %{public}s',
@@ -373,7 +373,7 @@ export class HuaweiAccount {
         fs.readSync(file.fd, buffer);
         fs.closeSync(file);
         const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-        const applied: number = applyBackupPayload(decoder.decodeToString(buffer), context);
+        const applied: number = applyBackupPayload(decoder.decodeToString(new Uint8Array(buffer)), context);
         return { ok: true, message: `已从本地镜像恢复（${applied} 条数据）` };
       } catch (e) {
         lastError = (e as Error).message;
