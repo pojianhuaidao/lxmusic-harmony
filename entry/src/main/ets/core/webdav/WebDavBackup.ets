@@ -1,9 +1,11 @@
 import { http } from '@kit.NetworkKit';
+import { common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { WebDavClient } from './WebDavClient';
 import { WebDavConfig } from './WebDavTypes';
 import { LocalLibrary, LibrarySummary } from '../sync/LocalLibrary';
 import { LxListData } from '../sync/SyncTypes';
+import { SourceBundle, SourceStore } from '../source/SourceStore';
 
 const DOMAIN: number = 0x0001;
 const TAG: string = 'WebDavBackup';
@@ -12,12 +14,35 @@ const TAG: string = 'WebDavBackup';
 export const BACKUP_DIR: string = 'LX Backup';
 /** 安卓版备份文件名是 lx_data.lxmc，鸿蒙版加 hm 后缀区分 */
 export const BACKUP_FILE: string = 'lx_data_hm.lxmc';
-/** 备份数据版本号：结构变了 +1 */
-const BACKUP_VERSION: number = 1;
+/** 备份数据版本号：结构变了 +1（v2 引入可选备份范围与音源） */
+const BACKUP_VERSION: number = 2;
 const REQUEST_TIMEOUT_MS: number = 20000;
 
 /** 界面刷新用的版本号 key（与 SyncManager.K_SYNC_DATA_VERSION 同一个值，避免跨层 import） */
 const K_SYNC_DATA_VERSION: string = 'sync_data_version';
+
+/** 备份内容选择：哪几类数据参与备份 / 恢复（全部为 true 时等价旧版全量备份） */
+export interface BackupScope {
+  /** 试听列表（本机播放队列） */
+  playList: boolean;
+  /** 收藏 */
+  loveList: boolean;
+  /** 歌单 */
+  playlists: boolean;
+  /** 不喜欢规则 */
+  dislike: boolean;
+  /** 音源（自建 / 导入的音源脚本） */
+  sources: boolean;
+}
+
+/** 全量备份范围（旧版行为：除音源外全部数据） */
+export const ALL_SCOPE: BackupScope = {
+  playList: true,
+  loveList: true,
+  playlists: true,
+  dislike: true,
+  sources: false,
+};
 
 /** 备份 / 恢复结果 */
 export interface WebDavBackupResult {
@@ -46,13 +71,13 @@ export class WebDavBackup {
   }
 
   /** 把当前音乐库整体备份到 WebDAV */
-  async backup(config: WebDavConfig): Promise<WebDavBackupResult> {
+  async backup(config: WebDavConfig, context?: common.Context): Promise<WebDavBackupResult> {
     if (config.url.length === 0) {
       return { ok: false, message: '还没有配置 WebDAV 服务器，请先在「WebDAV 云端音乐」里填写服务器地址' };
     }
     try {
       const folder: string = await this.ensureBackupDir(config);
-      const payload: string = buildBackupPayload();
+      const payload: string = buildBackupPayload(undefined, context);
       const url: string = `${folder}/${encodeURI(BACKUP_FILE)}`;
       const request = http.createHttp();
       try {
@@ -81,7 +106,7 @@ export class WebDavBackup {
   }
 
   /** 从 WebDAV 读取备份并应用到本地音乐库 */
-  async restore(config: WebDavConfig): Promise<WebDavBackupResult> {
+  async restore(config: WebDavConfig, context?: common.Context): Promise<WebDavBackupResult> {
     if (config.url.length === 0) {
       return { ok: false, message: '还没有配置 WebDAV 服务器，请先在「WebDAV 云端音乐」里填写服务器地址' };
     }
@@ -109,7 +134,7 @@ export class WebDavBackup {
         if (text.length === 0) {
           return { ok: false, message: '恢复失败：备份文件是空的' };
         }
-        const applied: number = applyBackupPayload(text);
+        const applied: number = applyBackupPayload(text, context);
         return { ok: true, message: `已从备份恢复（${applied} 条数据）` };
       } finally {
         request.destroy();
@@ -160,38 +185,85 @@ export class WebDavBackup {
 
 // ------------------------------------------------------------------ 数据
 
-/** 构建备份数据：与安卓版同目录同账号，文件名带 hm 后缀；内容是鸿蒙版自己的音乐库 */
-export function buildBackupPayload(): string {
+/** 构建备份数据：按勾选范围打包；scope 缺省时等价旧版全量（不含音源）。
+ *  context 提供时且勾选音源，才把音源索引 + 脚本正文一并打包（脚本可能数 MB）。 */
+export function buildBackupPayload(scope?: BackupScope, context?: common.Context): string {
   const library: LocalLibrary = LocalLibrary.getInstance();
+  const sc: BackupScope = scope !== undefined && scope !== null ? scope : ALL_SCOPE;
+  const ld: LxListData = library.listData();
+  const listData: LxListData = { defaultList: [], loveList: [], userList: [] };
+  if (sc.playList) {
+    listData.defaultList = ld.defaultList;
+  }
+  if (sc.loveList) {
+    listData.loveList = ld.loveList;
+  }
+  if (sc.playlists) {
+    listData.userList = ld.userList;
+  }
   const payload: BackupPayload = {
     version: BACKUP_VERSION,
     time: Date.now(),
     type: 'lxmusic_harmony_backup',
-    listData: library.listData(),
-    dislike: library.dislikeRules(),
+    scope: sc,
+    listData: listData,
+    dislike: sc.dislike ? library.dislikeRules() : '',
   };
+  if (sc.sources && context !== undefined && context !== null) {
+    const store: SourceStore = new SourceStore();
+    store.init(context);
+    if (store.isReady()) {
+      payload.sources = store.exportBundle();
+    }
+  }
   return JSON.stringify(payload);
 }
 
-/** 解析备份并应用到本地库；@returns 恢复的数据条数（歌单数 + 歌曲数） */
-export function applyBackupPayload(text: string): number {
+/**
+ * 解析备份并应用到本地库：按备份时勾选的范围逐类恢复——
+ * 勾选过的类别用备份覆盖本地，未勾选的类别保留本地现状；
+ * 旧版（v1）备份无 scope 字段，等价全量恢复。
+ * @returns 恢复的数据条数（歌单数 + 歌曲数 + 音源数）
+ */
+export function applyBackupPayload(text: string, context?: common.Context): number {
   const raw: BackupPayload | null = parseBackup(text);
   if (raw === null) {
     throw new Error('备份文件格式不对');
   }
   const library: LocalLibrary = LocalLibrary.getInstance();
-  if (raw.listData !== null && raw.listData !== undefined) {
-    library.applyRemoteListData(raw.listData);
-  }
-  if (typeof raw.dislike === 'string') {
+  const sc: BackupScope = raw.scope !== undefined && raw.scope !== null ? raw.scope : ALL_SCOPE;
+  // 列表逐类合并：备份有的覆盖、备份没有的保留本地现状
+  const merged: LxListData = mergeListData(library.listData(), raw.listData, sc);
+  library.applyRemoteListData(merged);
+  if (typeof raw.dislike === 'string' && sc.dislike) {
     library.applyRemoteDislikeData(raw.dislike);
+  }
+  let sourceCount: number = 0;
+  if (sc.sources && raw.sources !== undefined && raw.sources !== null && context !== undefined && context !== null) {
+    const store: SourceStore = new SourceStore();
+    store.init(context);
+    if (store.isReady()) {
+      sourceCount = store.importBundle(raw.sources);
+    }
   }
   library.mirrorToSession();
   // 递增版本号，让订阅了它的列表页 / 我的页重新读一次数据
   const version: number = AppStorage.get<number>(K_SYNC_DATA_VERSION) ?? 0;
   AppStorage.setOrCreate(K_SYNC_DATA_VERSION, version + 1);
   const summary: LibrarySummary = library.summary();
-  return summary.playlists + summary.songs;
+  const base: number = summary.playlists + summary.songs;
+  return sourceCount > 0 ? base + sourceCount : base;
+}
+
+/** 按备份范围合并本地与备份的列表数据：勾选类别取备份值，未勾选保留本地值 */
+function mergeListData(current: LxListData, backup: LxListData | undefined | null, sc: BackupScope): LxListData {
+  const b: LxListData = backup !== undefined && backup !== null
+    ? backup : { defaultList: [], loveList: [], userList: [] };
+  return {
+    defaultList: sc.playList ? b.defaultList : current.defaultList,
+    loveList: sc.loveList ? b.loveList : current.loveList,
+    userList: sc.playlists ? b.userList : current.userList,
+  };
 }
 
 function parseBackup(text: string): BackupPayload | null {
@@ -211,8 +283,13 @@ export interface BackupPayload {
   version: number;
   time: number;
   type: string;
+  /** v2 起记录本次备份勾选的范围；旧版备份无此字段 */
+  scope?: BackupScope;
+  /** 按 scope 截取后的列表数据（未勾选的类别为空数组） */
   listData: LxListData;
-  dislike: string;
+  dislike?: string;
+  /** 音源（索引 + 脚本正文 + 上次加载），勾选音源且提供 context 时才打包 */
+  sources?: SourceBundle;
 }
 
 // ------------------------------------------------------------------ 工具

@@ -1,20 +1,17 @@
-/**
- * 版本号规则（唯一版本源）：
- *   versionName = 1.MMDD.NN   （MMDD=构建月日，NN=当日序号，从 01 开始）
- *   versionCode = MMDDNN 前补 1（即 1MMDDNN）
- *   buildVersion = versionCode（与版本号保持一致，如 1101303）
- * 例：2026-10-12 当日第 1 次构建 -> 1.1012.01 / 1101201 / build 1101201
- * 本地（DevEco / build_sign.ps1）与 CI（build-hap.yml）出包必须以此文件为准，
- * 三处版本号保持一致，不得各自修改。
- */
+﻿/**
+ * 鐗堟湰鍙疯鍒欙紙鍞竴鐗堟湰婧愶級锛? *   versionName = 1.MMDD.NN   锛圡MDD=鏋勫缓鏈堟棩锛孨N=褰撴棩搴忓彿锛屼粠 01 寮€濮嬶級
+ *   versionCode = MMDDNN 鍓嶈ˉ 1锛堝嵆 1MMDDNN锛? *   buildVersion = versionCode锛堜笌鐗堟湰鍙蜂繚鎸佷竴鑷达紝濡?1101303锛? * 渚嬶細2026-10-12 褰撴棩绗?1 娆℃瀯寤?-> 1.1012.01 / 1101201 / build 1101201
+ * 鏈湴锛圖evEco / build_sign.ps1锛変笌 CI锛坆uild-hap.yml锛夊嚭鍖呭繀椤讳互姝ゆ枃浠朵负鍑嗭紝
+ * 涓夊鐗堟湰鍙蜂繚鎸佷竴鑷达紝涓嶅緱鍚勮嚜淇敼銆? */
 {
   "app": {
     "bundleName": "music.hm.op",
     "vendor": "example",
-    "versionCode": 1101501,
-    "versionName": "1.1015.01",
-    "buildVersion": "1101501",
+    "versionCode": 1101602,
+    "versionName": "1.1016.02",
+    "buildVersion": "1101602",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }
 }
+

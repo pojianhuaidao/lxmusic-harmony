@@ -124,6 +124,8 @@ const TABS: TabDef[] = [
 struct Index {
   @State activeTab: number = 0;
   @State playerOpen: boolean = false;
+  /** 是否停留在主页根（导航栈为空）：false = 正在子页面，主页常驻胶囊条隐藏，避免与子页面自身播放条叠加 */
+  @State atHomeRoot: boolean = true;
   @State queueOpen: boolean = false;
   @State topInset: number = 0;
   @State bottomInset: number = 0;
@@ -431,9 +433,23 @@ struct Index {
   private go(target: string): void {
     if (target === PAGE_MAIN) {
       this.pathStack.clear();
+      this.atHomeRoot = true;
       return;
     }
     this.pathStack.pushPath({ name: target });
+    this.atHomeRoot = false;
+  }
+
+  /** 子页面显示（压栈）时：隐藏主页常驻胶囊条（兜底：push 入口均已显式置 false） */
+  private onDestinationShown(): void {
+    this.atHomeRoot = false;
+  }
+
+  /** 子页面隐藏（pop 或覆盖）时：导航栈回空说明已回到主页根，恢复常驻胶囊条 */
+  private onDestinationHidden(): void {
+    if (this.pathStack.size() === 0) {
+      this.atHomeRoot = true;
+    }
   }
 
   /**
@@ -777,6 +793,7 @@ struct Index {
     }
     this.routePlaylistId = playlist.id;
     this.routePlaylistName = playlist.name;
+    this.atHomeRoot = false;
     this.pathStack.pushPath({ name: PAGE_PLAYLIST });
   }
 
@@ -787,6 +804,7 @@ struct Index {
     this.routeOnlineId = route.id;
     this.routeOnlineName = route.name;
     this.routeOnlineCover = route.cover;
+    this.atHomeRoot = false;
     this.pathStack.pushPath({ name: PAGE_ONLINE });
   }
 
@@ -1006,6 +1024,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('搜索'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_SOURCE) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1015,6 +1036,7 @@ struct Index {
       .titleBar(this.titleBarOptions('音源设置'))
       .onHidden(() => {
         this.refreshSourceSummary();
+        this.onDestinationHidden();
       })
     } else if (name === PAGE_BACKUP) {
       HdsNavDestination() {
@@ -1023,6 +1045,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('备份选项'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_CACHE) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1030,6 +1055,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('缓存'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_PLAY) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1037,6 +1065,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('播放设置'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_DOWNLOAD) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1044,6 +1075,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('下载设置'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_APPEARANCE) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1051,6 +1085,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('显示设置'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_WEBDAV) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1058,6 +1095,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('WebDAV 云端音乐'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_ABOUT) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1065,6 +1105,9 @@ struct Index {
         }
       }
       .titleBar(this.titleBarOptions('关于'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_HISTORY) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth() }) {
@@ -1088,6 +1131,9 @@ struct Index {
       }
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('最近播放'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_LOCAL) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth() }) {
@@ -1117,6 +1163,9 @@ struct Index {
       }
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('本地音乐'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_DOWNLOADS) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth() }) {
@@ -1139,6 +1188,9 @@ struct Index {
       }
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('下载管理'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_CLOUD) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth() }) {
@@ -1171,6 +1223,9 @@ struct Index {
       }
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('云端音乐'))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
     } else if (name === PAGE_ONLINE) {
       HdsNavDestination() {
         WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
@@ -1199,6 +1254,9 @@ struct Index {
       // 开始时返回键浮在封面上（底色透明），滚起来标题栏才变成磨砂。
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('', this.onlineScroller))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
       .bindToScrollable([this.onlineScroller])
     } else if (name === PAGE_PLAYLIST) {
       HdsNavDestination() {
@@ -1223,6 +1281,9 @@ struct Index {
       // 同上：本地歌单的名字写在封面右边，顶栏不再重复；封面滚上去时标题栏才起磨砂
       // 多选时整条换成「取消 + 已选中 N 项 + 全选」（见 pageTitleBar）
       .titleBar(this.pageTitleBar('', this.playlistScroller))
+      .onHidden(() => {
+        this.onDestinationHidden();
+      })
       .bindToScrollable([this.playlistScroller])
     }
   }
@@ -1363,26 +1424,32 @@ struct Index {
       // 与页签栏同一套避让口径（底距 ≥28vp），再往上让出 HDS_BAR_HEIGHT + 10 悬在页签栏
       // 正上方；内容与子页面同一份 MiniBarView（forceExpanded 恒展开，窄屏/宽屏都可点）。
       // 首页无歌时也常驻显示（组件内部对空态有兜底封面与文案），点击信息区进全屏播放器。
-      Row() {
-        MiniBarView({
-          windowWidth: this.windowWidth,
-          forceExpanded: true,
-          onOpenPlayer: () => {
-            this.openPlayer();
-          },
-          onOpenQueue: () => {
-            this.openQueue();
-          },
-        })
+      // 常驻胶囊条只在「主页根 + 播放器/队列未打开」时显示：
+      //   - 进入子页面（歌单详情/在线列表/设置等，导航栈非空）时隐藏，避免与子页面自身播放条叠加
+      //   - 播放器/播放列表半模态打开时隐藏（LARGE 顶部留缝会露出下层胶囊）
+      //   - 返回主页（栈回空）经 destination.onHidden 恢复
+      if (this.atHomeRoot && !this.playerOpen && !this.queueOpen) {
+        Row() {
+          MiniBarView({
+            windowWidth: this.windowWidth,
+            forceExpanded: true,
+            onOpenPlayer: () => {
+              this.openPlayer();
+            },
+            onOpenQueue: () => {
+              this.openQueue();
+            },
+          })
+        }
+        .width(this.floatingBarSmallWidthVp())
+        .height(HDS_BAR_HEIGHT)
+        .borderRadius(HDS_BAR_HEIGHT / 2)
+        .clip(true)
+        // 内容区自绘玻璃（内容区不构成系统材质，见 ui/Glass.ets 说明）
+        .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+        .align(Alignment.Bottom)
+        .margin({ bottom: this.homeTabBarBottomMarginVp() + HDS_BAR_HEIGHT + 10 })
       }
-      .width(this.floatingBarSmallWidthVp())
-      .height(HDS_BAR_HEIGHT)
-      .borderRadius(HDS_BAR_HEIGHT / 2)
-      .clip(true)
-      // 内容区自绘玻璃（内容区不构成系统材质，见 ui/Glass.ets 说明）
-      .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
-      .align(Alignment.Bottom)
-      .margin({ bottom: this.homeTabBarBottomMarginVp() + HDS_BAR_HEIGHT + 10 })
 
       // ---------------------------------------------------- 状态提示
       if (this.toast.length > 0) {

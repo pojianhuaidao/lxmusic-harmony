@@ -19,6 +19,13 @@ export interface ActiveSource {
   loadedAt: number;
 }
 
+/** 音源备份包：索引 + 每个源的脚本正文 + 上次加载的源（用于华为云端备份 / 恢复） */
+export interface SourceBundle {
+  sources: SourceInfo[];
+  scripts: Record<string, string>;
+  active: ActiveSource | null;
+}
+
 /**
  * 音源持久化
  *
@@ -228,5 +235,58 @@ export class SourceStore {
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'failed to clear active source: %{public}s', JSON.stringify(e));
     }
+  }
+
+  // ------------------------------------------------------------ 备份 / 恢复
+
+  /** 导出全部音源（索引 + 每个源的脚本正文 + 上次加载的源），用于云端备份 */
+  exportBundle(): SourceBundle {
+    const sources: SourceInfo[] = this.list();
+    const scripts: Record<string, string> = {};
+    for (let i = 0; i < sources.length; i++) {
+      const id: string = sources[i].id;
+      try {
+        scripts[id] = this.getScript(id);
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'export script failed: %{public}s', id);
+      }
+    }
+    let active: ActiveSource | null = null;
+    try {
+      active = this.loadActive();
+    } catch (e) {
+      active = null;
+    }
+    return { sources: sources, scripts: scripts, active: active };
+  }
+
+  /**
+   * 导入音源备份：逐源覆盖写入（已有同 id 覆盖，没有则新增），
+   * 并恢复「上次加载的源」记录；@returns 恢复的源数量
+   */
+  importBundle(bundle: SourceBundle): number {
+    const sources: SourceInfo[] = bundle.sources !== undefined && bundle.sources !== null ? bundle.sources : [];
+    let count: number = 0;
+    for (let i = 0; i < sources.length; i++) {
+      const info: SourceInfo = sources[i];
+      const script: string = bundle.scripts[info.id];
+      if (script === undefined || script === null || script.length === 0) {
+        continue;
+      }
+      try {
+        if (this.find(info.id) !== null) {
+          this.replace(info.id, info, script);
+        } else {
+          this.add(info, script);
+        }
+        count++;
+      } catch (e) {
+        hilog.warn(DOMAIN, TAG, 'import source failed: %{public}s', info.id);
+      }
+    }
+    if (bundle.active !== null && bundle.active !== undefined) {
+      this.saveActive(bundle.active.id, bundle.active.env);
+    }
+    return count;
   }
 }

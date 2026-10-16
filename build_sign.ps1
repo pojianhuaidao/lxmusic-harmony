@@ -20,7 +20,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $KeyDir = Join-Path $Root "key"
 $OutDir = Join-Path $Root "output"
-$SignJar = Join-Path $Root "tools\sign\hap-sign-tool.jar"
+$SignJar = Join-Path $KeyDir "hap-sign-tool.jar"
 
 # ---- 1b. locate app_packing_tool.jar (官方 .app 打包，规避手搓 zip 导致 AGC 996) ----
 $AppPackJar = Get-ChildItem "C:\Program Files\Huawei\DevEco Studio\sdk" -Recurse -Filter "app_packing_tool.jar" -ErrorAction SilentlyContinue |
@@ -36,9 +36,6 @@ if (-not $AppPackJar) { Write-Error "app_packing_tool.jar not found (DevEco SDK 
 Write-Host "==> app_packing_tool: $AppPackJar"
 
 # ---- 1. locate toolchain ----
-if (-not (Test-Path $SignJar)) {
-    $SignJar = Join-Path $KeyDir "hap-sign-tool.jar"
-}
 if (-not (Test-Path $SignJar)) { Write-Error "Missing sign tool: $SignJar (see key\KEY.txt)" }
 
 $hvigorJs = "C:\Program Files\Huawei\DevEco Studio\tools\hvigor\hvigor\bin\hvigor.js"

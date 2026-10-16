@@ -28,6 +28,16 @@ export const K_DOWNLOAD_VERSION: string = 'download_version';
 const DIR_NAME: string = 'Download';
 /** 公共目录 uri 的前缀：据此把「文件管理里能看到的文件」与沙箱兜底文件区分开 */
 const PUBLIC_URI_PREFIX: string = 'file://docs';
+/**
+ * 公共下载目录的物理路径前缀
+ *
+ * 系统保存对话框返回的是 uri（file://docs/...），但我们拼文件名后转成物理路径落盘
+ * （`new fileUri.FileUri(...).path`），下载记录 item.uri 存的是 `/storage/Users/
+ * currentUser/Download/<包名>/xxx.mp3` 这种物理路径，不是 file://docs 开头 ——
+ * 判断「是否公共目录文件」时两种前缀都要认，否则 downloadDirUri 丢了之后
+ * 设置页会误显示「应用内目录」。
+ */
+const PUBLIC_DOWNLOAD_PATH_PREFIX: string = '/storage/Users/currentUser/Download/';
 const INDEX_FILE: string = 'downloads.json';
 const PART_SUFFIX: string = '.part';
 /** 同时下载数：跟着洛雪的 download.maxDownloadNum 取 2，少占带宽也少被平台限流 */
@@ -638,12 +648,20 @@ export class DownloadManager {
     }
     for (let i = this.items.length - 1; i >= 0; i--) {
       const uri: string = this.items[i].uri;
-      if (!uri.startsWith(PUBLIC_URI_PREFIX)) {
-        continue;
-      }
-      const cut: number = uri.lastIndexOf('/');
-      if (cut > PUBLIC_URI_PREFIX.length) {
-        return uri.substring(0, cut);
+      // uri 形式（file://docs/...）与物理路径形式（/storage/Users/currentUser/Download/...）
+      // 都认：下载记录里存的是物理路径（openViaPicker 里 FileUri.path 的结果），
+      // 只认 uri 前缀会把公共目录文件当成沙箱文件，设置页就显示错了。
+      let cut: number = -1;
+      if (uri.startsWith(PUBLIC_URI_PREFIX)) {
+        cut = uri.lastIndexOf('/');
+        if (cut > PUBLIC_URI_PREFIX.length) {
+          return uri.substring(0, cut);
+        }
+      } else if (uri.startsWith(PUBLIC_DOWNLOAD_PATH_PREFIX)) {
+        cut = uri.lastIndexOf('/');
+        if (cut > PUBLIC_DOWNLOAD_PATH_PREFIX.length) {
+          return uri.substring(0, cut);
+        }
       }
     }
     return '';

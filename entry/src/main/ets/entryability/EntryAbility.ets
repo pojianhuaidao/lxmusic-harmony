@@ -5,6 +5,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { util } from '@kit.ArkTS';
 import { window, display } from '@kit.ArkUI';
 import { initialize as agConnectInitialize, JsonTypeInfo } from '@hw-agconnect/hmcore';
+import auth from '@hw-agconnect/auth';
 import { PlaybackService } from '../core/player/PlaybackService';
 import { PlaySession, K_OPEN_PLAYER_PENDING } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
@@ -55,8 +56,10 @@ export default class EntryAbility extends UIAbility {
     try {
       const rawFile: Uint8Array = this.context.resourceManager.getRawFileContentSync('agconnect-services.json');
       const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-      const json: JsonTypeInfo = JSON.parse(decoder.decodeToString(rawFile)) as JsonTypeInfo;
+      const jsonStr: string = decoder.decodeToString(rawFile);
+      const json: JsonTypeInfo = JSON.parse(jsonStr) as JsonTypeInfo;
       agConnectInitialize(this.context, json);
+      auth.init(this.context, jsonStr);
       hilog.info(DOMAIN, 'testTag', 'AGC initialized');
     } catch (e) {
       hilog.error(DOMAIN, 'testTag', 'AGC init failed: %{public}s', (e as Error).message);
