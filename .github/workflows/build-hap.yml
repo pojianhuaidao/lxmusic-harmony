@@ -47,6 +47,7 @@ jobs:
       - name: Install hvigor
         run: |
           npm config set @ohos:registry=https://repo.harmonyos.com/npm/
+          npm config set @hw-agconnect:registry=https://repo.harmonyos.com/npm/
           npm install --no-save @ohos/hvigor@latest @ohos/hvigor-ohos-plugin@latest
 
       - name: Build HAP

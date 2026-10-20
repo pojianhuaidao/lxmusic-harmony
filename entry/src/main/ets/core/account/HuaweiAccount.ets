@@ -2,7 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { cloudSync, fileIo as fs, fileUri } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import auth, { AuthUser, SignInParam, SignInResult } from '@hw-agconnect/auth';
+import auth, { AuthUser, HwIdCredentialInfo, SignInParam, SignInResult } from '@hw-agconnect/auth';
 import { ALL_SCOPE, applyBackupPayload, BackupScope, buildBackupPayload } from '../webdav/WebDavBackup';
 import { storageRootDir } from '../common/StoragePaths';
 
@@ -100,7 +100,8 @@ export class HuaweiAccount {
    * 有残留会话先 signOut 再登录；万一探测漏了、signIn 仍报该错，也自动注销重试一次。
    */
   async login(context: common.Context): Promise<AccountBackupResult> {
-    const param: SignInParam = { autoCreateUser: true, credentialInfo: { kind: 'hwid' } };
+    const credentialInfo: HwIdCredentialInfo = { kind: 'hwid' };
+    const param: SignInParam = { autoCreateUser: true, credentialInfo };
     try {
       const current: AuthUser | null = await auth.getCurrentUser();
       if (current !== null && current !== undefined) {
