@@ -14,8 +14,9 @@ import { I_CLOUD, I_PERSON, I_REFRESH, IconGlyph } from '../ui/Icons';
  * 备份选项（由「其他设置」里的「数据」改名而来）
  *
  * 提供两条备份 / 恢复链路：
- *   1. 华为账号：登录（右上角 / 本页）后把音乐数据备份到 AGC Cloud Storage
- *      （远端目录 lxmusic_backups/lx_data_hw.lxmc），同时写一份本地端侧镜像兜底；
+ *   1. 华为账号：登录（右上角 / 本页）后把音乐数据备份到使用者自己的华为云空间
+ *      （端云文件协同，el2/cloud 目录自动同步；远端目录 lxmusic_backups/lx_data_hw.lxmc），
+ *      同时写一份本地端侧镜像兜底；
  *   2. WebDAV：与安卓版 lx-music-mobile 共享同一套账号与 LX Backup 目录。
  * 参与备份的数据一致：试听列表 / 收藏 / 歌单 / 不喜欢规则（由 LocalLibrary 提供）。
  */
@@ -76,12 +77,20 @@ export struct BackupOptionsView {
       return;
     }
     this.hwBusy = true;
-    this.hwStatus = '正在备份到华为云端…';
+    this.hwStatus = '正在备份到华为云空间…';
     const context: common.Context = getContext(this) as common.Context;
+    // 整体超时兜底：底层链路（上传启动 + 任务等待）即使因 SDK 挂起永不返回，
+    // 这里也强制复位 hwBusy 并提示失败，杜绝"备份中"永远卡死
+    const timer: number = setTimeout(() => {
+      this.hwBusy = false;
+      this.hwStatus = '备份超时，请检查网络后重试';
+    }, 120000);
     HuaweiAccount.getInstance().backup(context, this.buildScope()).then((result) => {
+      clearTimeout(timer);
       this.hwStatus = result.message;
       this.hwBusy = false;
     }).catch((e: Error) => {
+      clearTimeout(timer);
       this.hwStatus = `备份失败：${e.message}`;
       this.hwBusy = false;
     });
@@ -93,9 +102,15 @@ export struct BackupOptionsView {
       return;
     }
     this.hwBusy = true;
-    this.hwStatus = '正在从华为云端恢复…';
+    this.hwStatus = '正在从华为云空间恢复…';
     const context: common.Context = getContext(this) as common.Context;
+    // 整体超时兜底：同 hwBackup，防止恢复链路挂起导致"恢复中"永远卡死
+    const timer: number = setTimeout(() => {
+      this.hwBusy = false;
+      this.hwStatus = '恢复超时，请检查网络后重试';
+    }, 120000);
     HuaweiAccount.getInstance().restore(context).then((result) => {
+      clearTimeout(timer);
       this.hwStatus = result.message;
       if (result.ok) {
         SyncManager.getInstance().bumpDataVersion();
@@ -103,6 +118,7 @@ export struct BackupOptionsView {
       }
       this.hwBusy = false;
     }).catch((e: Error) => {
+      clearTimeout(timer);
       this.hwStatus = `恢复失败：${e.message}`;
       this.hwBusy = false;
     });
@@ -195,10 +211,10 @@ export struct BackupOptionsView {
           .fontColor(C_TEXT_SUB)
           .width('100%')
           .textAlign(TextAlign.Start)
-        HintText({ text: '登录后按下方勾选，把试听列表 / 收藏 / 歌单 / 不喜欢规则 / 音源备份到华为云端备份区'
-          + '（AGC 云存储），或随时从云端恢复回来；云端无备份时会回退读取本地端侧镜像。' })
+        HintText({ text: '登录后按下方勾选，把试听列表 / 收藏 / 歌单 / 不喜欢规则 / 音源备份到你的华为云空间'
+          + '，或随时恢复回来。请在系统「设置 - 云空间」打开本应用的同步开关，备份会自动同步到你的云空间；未开同步时会回退读取本地端侧镜像。' })
         Row({ space: 12 }) {
-          Button('备份到华为云端')
+          Button('备份到华为云空间')
             .fontSize(F_ITEM)
             .height(40)
             .layoutWeight(1)
@@ -207,7 +223,7 @@ export struct BackupOptionsView {
             .onClick(() => {
               this.hwBackup();
             })
-          Button('从华为云端恢复')
+          Button('从华为云空间恢复')
             .fontSize(F_ITEM)
             .height(40)
             .layoutWeight(1)
@@ -230,7 +246,7 @@ export struct BackupOptionsView {
             this.hwStatus = '';
           })
       } else {
-        HintText({ text: '登录华为账号后，可把音乐数据备份到华为云端备份区，或随时恢复回来。' })
+        HintText({ text: '登录华为账号后，可把音乐数据备份到你的华为云空间，或随时恢复回来。' })
         HintText({ text: '登录入口在「我的」页右上角。' })
       }
 

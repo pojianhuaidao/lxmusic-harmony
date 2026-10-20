@@ -58,7 +58,7 @@ export struct HuaweiAccountSheet {
       }
       .width('100%')
 
-      Text('登录华为账号后，可把试听列表 / 收藏 / 歌单 / 不喜欢规则 / 音源备份到华为云端备份区，'
+      Text('登录华为账号后，可把试听列表 / 收藏 / 歌单 / 不喜欢规则 / 音源备份到你的华为云空间，'
         + '或随时恢复回来（备份内容可在备份页勾选）。登录将拉起华为账号授权（AGC 认证服务）。')
         .fontSize(F_SUB)
         .fontColor(C_TEXT_SUB)

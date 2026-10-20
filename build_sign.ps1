@@ -38,15 +38,16 @@ Write-Host "==> app_packing_tool: $AppPackJar"
 # ---- 1. locate toolchain ----
 if (-not (Test-Path $SignJar)) { Write-Error "Missing sign tool: $SignJar (see key\KEY.txt)" }
 
-$hvigorJs = "C:\Program Files\Huawei\DevEco Studio\tools\hvigor\hvigor\bin\hvigor.js"
-if (-not (Test-Path $hvigorJs)) {
+# hvigor 官方 wrapper（IDE 自带；自动处理插件加载，规避 node_modules 空壳/顶层 hvigor 冲突）
+$hvigorw = "C:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.bat"
+if (-not (Test-Path $hvigorw)) {
     $candidates = @(
-        "$env:DEVECO_HOME\tools\hvigor\hvigor\bin\hvigor.js",
-        "C:\Program Files\Huawei\DevEco Studio\tools\hvigor\hvigor\bin\hvigor.js"
+        "$env:DEVECO_HOME\tools\hvigor\bin\hvigorw.bat",
+        "$Root\hvigorw.bat"
     )
-    $hvigorJs = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    $hvigorw = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 }
-if (-not $hvigorJs) { Write-Error "hvigor.js not found. Install DevEco Studio first." }
+if (-not $hvigorw) { Write-Error "hvigorw.bat not found. Install DevEco Studio first." }
 
 $p12 = Join-Path $KeyDir "music.p12"
 $cerItem = Get-ChildItem $KeyDir -Filter "*.cer" | Select-Object -First 1
@@ -77,12 +78,8 @@ if (-not $sdkHome) { Write-Error "DevEco SDK not found (DEVECO_SDK_HOME invalid)
 $env:DEVECO_SDK_HOME = $sdkHome
 Write-Host "==> DEVECO_SDK_HOME -> $env:DEVECO_SDK_HOME"
 
-# ---- 3b. NODE_PATH 指向项目 node_modules（@ohos/hvigor 与 @ohos/hvigor-ohos-plugin 的链接，
-#     命令行裸跑 hvigor.js 时 IDE 内置插件不会自动进入解析链，需靠 NODE_PATH 兜底） ----
-if (-not $env:NODE_PATH) {
-    $env:NODE_PATH = Join-Path $Root "node_modules"
-}
-Write-Host "==> NODE_PATH -> $env:NODE_PATH"
+# ---- 3b. （已移除）NODE_PATH 兜底不再需要：hvigorw 官方 wrapper 自行解析 IDE 内置插件，
+#     项目 node_modules 里的 @ohos/hvigor 反而会触发 00302013 root node 冲突，勿再装回顶层 ----
 
 # ---- 4. locate/build unsigned HAP + signed APP（hvigor assembleApp 官方链路） ----
 #     官方 Build App(s) 链路：一次产出 unsigned HAP、signed HAP 与 signed APP。
@@ -95,8 +92,10 @@ if (-not $SkipBuild) {
     Push-Location $Root
     try {
         # 先 clean 再全量构建：规避 hvigor 增量缓存把打包判 up-to-date 导致版本号仍是旧包
-        node $hvigorJs clean --no-daemon
-        node $hvigorJs -p product=default -p buildMode=release assembleApp --no-daemon
+        & $hvigorw clean --no-daemon
+        if ($LASTEXITCODE -ne 0) { Write-Error "hvigor clean failed (exit $LASTEXITCODE). Abort." }
+        & $hvigorw --mode project -p product=default -p buildMode=release assembleApp --no-daemon
+        if ($LASTEXITCODE -ne 0) { Write-Error "hvigor assembleApp failed (exit $LASTEXITCODE). Abort." }
     } finally {
         Pop-Location
     }
