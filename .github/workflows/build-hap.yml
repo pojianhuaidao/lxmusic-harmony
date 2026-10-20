@@ -52,9 +52,9 @@ jobs:
       - name: Install project dependencies (ohpm)
         run: |
           set -euo pipefail
-          OHPM=$(find "${HOS_SDK_HOME}" -path '*/command-line-tools/ohpm/bin/ohpm' -type f | head -n 1)
-          if [ -z "$OHPM" ]; then
-            echo "ohpm not found in HOS_SDK_HOME" >&2
+          OHPM="$(dirname "${HOS_SDK_HOME}")/ohpm/bin/ohpm"
+          if [ ! -f "$OHPM" ]; then
+            echo "ohpm not found at $OHPM (HOS_SDK_HOME=${HOS_SDK_HOME})" >&2
             exit 1
           fi
           "$OHPM" config set registry https://ohpm.openharmony.cn/ohpm/
