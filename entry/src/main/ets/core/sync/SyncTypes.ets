@@ -1,5 +1,5 @@
 /**
- * 洛雪音乐库的数据类型
+ * 上游项目库的数据类型
  *
  * 与 lx-music-mobile / lx-music-sync-server 的约定逐字对齐：
  *   - 歌曲：`LX.Music.MusicInfoOnline`（id/name/singer/source/interval/meta）；
@@ -146,11 +146,11 @@ export interface LxDislikeMusicInfo {
 export const ADD_MUSIC_TOP: string = 'top';
 export const ADD_MUSIC_BOTTOM: string = 'bottom';
 
-/** 洛雪内置收藏列表（loveList）：界面把它当一个内置歌单用，协议上仍是 loveList */
+/** 上游内置收藏列表（loveList）：界面把它当一个内置歌单用，协议上仍是 loveList */
 export const LIST_ID_LOVE: string = 'love';
 /** 内置收藏歌单的展示名 —— 与官方客户端叫法一致 */
 export const LOVE_LIST_NAME: string = '我的收藏';
 
-/** 不喜欢规则的分隔符（与洛雪 SPLIT_CHAR 一致） */
+/** 不喜欢规则的分隔符（与上游 SPLIT_CHAR 一致） */
 export const DISLIKE_NAME_SEP: string = '@';
 export const DISLIKE_NAME_ALIAS: string = '#';

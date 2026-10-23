@@ -44,7 +44,7 @@ const BATCH_ACTIONS_FAVORITE: string[] = ['添加到歌单', '添加到播放列
 /**
  * 歌单详情（点歌单进来的那一页）
  *
- * 对应洛雪点开歌单后的界面：顶部是歌单封面 + 名称 + 曲目数，
+ * 对应上游点开歌单后的界面：顶部是歌单封面 + 名称 + 曲目数，
  * 下面「播放全部」，再下面是歌单里的歌曲，点某一首就从这一首开始播。
  * 点歌单**不再**直接「全部播放 + 弹播放列表」——那是播放列表（队列）的入口，
  * 歌单本身要先能看、能挑。
@@ -216,7 +216,7 @@ export struct PlaylistDetailView {
     return style;
   }
 
-  /** 从某一首开始播：整张歌单成为播放队列（与洛雪一致） */
+  /** 从某一首开始播：整张歌单成为播放队列（与上游一致） */
   private playFrom(index: number): void {
     if (index < 0 || index >= this.songs.length) {
       return;
@@ -293,7 +293,7 @@ export struct PlaylistDetailView {
     }
   }
 
-  /** 添加到播放列表：追加到队尾（队列就是洛雪的「试听列表」，会同步出去） */
+  /** 添加到播放列表：追加到队尾（队列就是上游的「试听列表」，会同步出去） */
   private addToQueue(item: SongItem): void {
     PlaySession.getInstance().addToQueue(item);
     this.toast(`已添加到播放列表：${item.name}`);
@@ -849,7 +849,7 @@ export struct PlaylistDetailView {
               ListItem() {
                 EmptyState({
                   text: '这个歌单还没有歌曲',
-                  hint: '可以在洛雪桌面端 / 移动端把歌加进来，同步后就会出现',
+                  hint: '可以在桌面端 / 移动端把歌加进来，同步后就会出现',
                   topPadding: 56,
                 })
               }

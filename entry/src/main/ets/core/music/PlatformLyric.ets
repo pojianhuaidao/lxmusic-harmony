@@ -1,15 +1,20 @@
-import { LxMusicInfo, decodeName } from './MusicSearch';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { LxMusicInfo, decodeName, searchMusic } from './MusicSearch';
 import { LxRequestOptions, LxResponse, lxRequest } from '../source/LxHttp';
 import { asObjectArray, asRecord, asString, httpGetJson, httpGetText, httpPostForm } from './PlatformHttp';
 import { bytesToUtf8, fromBase64, utf8Bytes } from './LxCrypto';
 import { inflateZlib } from './Inflate';
+import { LyricCandidate, parseIntervalMs, pickAutoMatch, scoreCandidate } from '../local/LyricMatch';
+
+const DOMAIN: number = 0x0001;
+const TAG: string = 'PlatformLyric';
 
 /**
  * 内置平台歌词
  *
- * 为什么不能靠自定义源：洛雪的源协议里，平台源的 action 白名单只有 `musicUrl`
+ * 为什么不能靠自定义源：上游的源协议里，平台源的 action 白名单只有 `musicUrl`
  * （见 lx_preload.js 的 supportActions / 官方 user-api-preload.js），
- * 也就是说「给 musicInfo 拿歌词」这件事本来就不属于源规则。洛雪自己是用内置的
+ * 也就是说「给 musicInfo 拿歌词」这件事本来就不属于源规则。上游自己是用内置的
  * 平台 SDK 取词的（`musicSdk[source].getLyric`），所以这里把 kw / kg / tx / mg / wy
  * 五个平台的内置歌词移植过来，与源无关、开箱即有词。
  *
@@ -123,7 +128,7 @@ function parseRawLrc(text: string, stripWordTags: boolean): RawLrcLine[] {
 
 /**
  * 同一时间点出现两句时，后一句其实是翻译（酷我歌词的排法）。
- * 这一条照抄洛雪 kw/lyric.js 的 sortLrcArr：把重复时间的后一句挪成
+ * 这一条照抄上游 kw/lyric.js 的 sortLrcArr：把重复时间的后一句挪成
  * 「上一句时间的翻译」，避免界面上出现两条一样的词。
  */
 function splitTranslation(lines: RawLrcLine[]): PlatformLyric {
@@ -317,26 +322,105 @@ async function wyLyric(songmid: string): Promise<PlatformLyric> {
 
 // ------------------------------------------------------------------ 入口
 
+/** 单平台取词分派：无 try 包裹，供主链路与兜底复用 */
+async function platformLyricOf(info: LxMusicInfo): Promise<PlatformLyric> {
+  if (info.source === 'wy') {
+    return await wyLyric(info.songmid);
+  }
+  if (info.source === 'kw') {
+    return await kwLyric(info.songmid);
+  }
+  if (info.source === 'kg') {
+    return await kgLyric(info);
+  }
+  if (info.source === 'tx') {
+    return await txLyric(info.songmid);
+  }
+  if (info.source === 'mg') {
+    return await mgLyric(info.songmid);
+  }
+  return EMPTY_LYRIC;
+}
+
 /** 按平台取内置歌词；任何失败都返回空，界面显示「暂无歌词」 */
 export async function fetchPlatformLyric(info: LxMusicInfo): Promise<PlatformLyric> {
   try {
-    if (info.source === 'wy') {
-      return await wyLyric(info.songmid);
-    }
-    if (info.source === 'kw') {
-      return await kwLyric(info.songmid);
-    }
-    if (info.source === 'kg') {
-      return await kgLyric(info);
-    }
-    if (info.source === 'tx') {
-      return await txLyric(info.songmid);
-    }
-    if (info.source === 'mg') {
-      return await mgLyric(info.songmid);
-    }
+    return await platformLyricOf(info);
   } catch (e) {
     return EMPTY_LYRIC;
   }
+}
+
+// ------------------------------------------------------------------ 多平台兜底
+
+/** 兜底搜索平台顺序：与本地歌词匹配同一套（按「搜索接口稳定程度」排序），跳过原平台 */
+const FALLBACK_PLATFORMS: string[] = ['kw', 'kg', 'tx', 'mg', 'wy'];
+
+/**
+ * 歌词兜底：原平台没有词时，按 FALLBACK_PLATFORMS 顺序到其它平台
+ * 「搜同一首 -> 取词」，一个平台没有就继续下一个，尽量提高命中率。
+ *
+ * 候选筛选复用本地歌匹配的「宁缺勿错」打分（歌名一致 + 歌手 / 时长至少一个对上），
+ * 避免兜底配到另一个版本的错词；某个平台搜索或取词失败只跳过，不中断整条链。
+ */
+async function fallbackPlatformLyric(info: LxMusicInfo): Promise<PlatformLyric> {
+  const name: string = typeof info.name === 'string' ? info.name : '';
+  const singer: string = typeof info.singer === 'string' ? info.singer : '';
+  if (name.length === 0) {
+    return EMPTY_LYRIC;
+  }
+  const keyword: string = singer.length > 0 ? `${name} ${singer}` : name;
+  const durationMs: number = parseIntervalMs(typeof info.interval === 'string' ? info.interval : '');
+  for (const platform of FALLBACK_PLATFORMS) {
+    if (platform === info.source) {
+      continue;
+    }
+    let results: LxMusicInfo[] = [];
+    try {
+      results = await searchMusic(keyword, platform, 1, 20);
+    } catch (e) {
+      hilog.info(DOMAIN, TAG, 'fallback search on %{public}s failed: %{public}s',
+        platform, (e as Error).message);
+      continue;
+    }
+    if (results.length === 0) {
+      continue;
+    }
+    const candidates: LyricCandidate[] = [];
+    for (const candidate of results) {
+      candidates.push(scoreCandidate(candidate, name, singer, durationMs));
+    }
+    const best: LxMusicInfo | null = pickAutoMatch(candidates);
+    if (best === null) {
+      continue;
+    }
+    try {
+      const lyric: PlatformLyric = await platformLyricOf(best);
+      if (lyric.lyric.length > 0) {
+        hilog.info(DOMAIN, TAG, 'fallback lyric matched on %{public}s for "%{public}s"',
+          platform, name);
+        return lyric;
+      }
+    } catch (e) {
+      hilog.info(DOMAIN, TAG, 'fallback lyric on %{public}s failed: %{public}s',
+        platform, (e as Error).message);
+    }
+  }
   return EMPTY_LYRIC;
+}
+
+/**
+ * 取词入口（带多平台兜底）：先按歌曲原平台取词，原平台没词（或取词失败）
+ * 时按平台列表顺序搜索同一首再取词，提高命中率；与现有设置开关 / 缓存 / 下载流程兼容。
+ */
+export async function fetchPlatformLyricWithFallback(info: LxMusicInfo): Promise<PlatformLyric> {
+  const primary: PlatformLyric = await fetchPlatformLyric(info);
+  if (primary.lyric.length > 0) {
+    return primary;
+  }
+  try {
+    return await fallbackPlatformLyric(info);
+  } catch (e) {
+    return EMPTY_LYRIC;
+  }
 }

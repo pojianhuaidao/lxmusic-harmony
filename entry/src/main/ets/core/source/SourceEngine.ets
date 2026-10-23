@@ -31,7 +31,7 @@ const INIT_TIMEOUT: number = 10000;
 const REGISTER_WAIT_TIMEOUT: number = 8000;
 /**
  * 等待源脚本解析出播放链接的上限。
- * 洛雪本身对 sendAction 不做超时（一直等），这里给一个足够宽松的上限：
+ * 上游本身对 sendAction 不做超时（一直等），这里给一个足够宽松的上限：
  * 很多音源是「代理型」的（脚本再请求一个中转 API），冷启动 + 多次串行请求都可能很慢，
  * 超时太短只会把本来能成功的解析误判成失败。沙箱里 lx.request 自己的 timeout 上限是 60s。
  */
@@ -85,7 +85,7 @@ interface NativeResponseMessage {
 }
 
 /**
- * 洛雪音乐自定义音源核心引擎（HarmonyOS 版）
+ * 上游项目自定义音源核心引擎（HarmonyOS 版）
  *
  * 对应 lx-music-mobile 的组合：
  *   - src/core/userApi.ts                      导入 / 删除 / 加载音源
@@ -98,7 +98,7 @@ interface NativeResponseMessage {
  *
  * 实现方式：用 ArkWeb 承载 lx_preload.js，得到一个可执行源脚本（源规则）的沙箱；
  * 沙箱里 lx.request 产生的网络请求通过 lxBridge 回调到 ArkTS，由 LxHttp 代理，
- * 再把响应送回沙箱。这与洛雪「QuickJS 沙箱 + 原生代理网络」的架构一一对应。
+ * 再把响应送回沙箱。这与上游「QuickJS 沙箱 + 原生代理网络」的架构一一对应。
  *
  * 使用方式（外部调用只需三步）：
  *   1. 页面挂载 SourceSandboxHost（注入沙箱宿主）
@@ -328,7 +328,7 @@ export class SourceEngine {
     this.pushLog('info', `已清理 ${remove.length} 条重复音源`);
   }
 
-  /** 通过链接导入源脚本（对应洛雪的「导入在线源」） */
+  /** 通过链接导入源脚本（对应上游的「导入在线源」） */
   async importFromUrl(url: string): Promise<SourceInfo> {
     if (!/^https?:\/\//.test(url)) {
       throw new Error('请输入以 http:// 或 https:// 开头的音源链接');
@@ -440,7 +440,7 @@ export class SourceEngine {
   /**
    * 在沙箱中加载并初始化一个音源。
    * 每次加载都会刷新沙箱页面，保证不同源脚本的全局上下文互不污染
-   * （对应洛雪每次 loadScript 都会新建 QuickJSContext）。
+   * （对应上游每次 loadScript 都会新建 QuickJSContext）。
    */
   async loadSource(id: string): Promise<Record<string, SupportedSource>> {
     if (!this.prepared) {
@@ -498,7 +498,7 @@ export class SourceEngine {
         }).catch(() => {
           reject(new Error(
             '音源初始化超时：脚本已执行但没有调用 lx.send("inited")。' +
-            '可能原因：脚本报错（看日志）、脚本要求 lx.env 为 desktop（可切换兼容模式）、或脚本不是洛雪自定义源格式。',
+            '可能原因：脚本报错（看日志）、脚本要求 lx.env 为 desktop（可切换兼容模式）、或脚本不是上游自定义源格式。',
           ));
         });
       }, INIT_TIMEOUT);
@@ -506,7 +506,7 @@ export class SourceEngine {
 
     if (looksLikeEsm(script)) {
       this.cancelInitWait();
-      throw new Error('源脚本是 ES Module（含顶层 import/export），本引擎只支持洛雪自定义源脚本（普通脚本）');
+      throw new Error('源脚本是 ES Module（含顶层 import/export），本引擎只支持上游自定义源脚本（普通脚本）');
     }
     this.pushLog('info', `源脚本长度 ${script.length} 字符`);
     // 头部（元信息注释）与尾部（通常在这里 lx.send('inited')）最能说明脚本格式是否正常
@@ -542,7 +542,7 @@ export class SourceEngine {
         const envHint: string = state.env === 'mobile'
           ? '如脚本要求桌面环境，可到音源设置切换兼容模式后重新加载。' : '';
         throw new Error(
-          `源脚本执行后仍未注册 request 处理器（脚本可能不是洛雪自定义源格式，或自身校验未通过）。` +
+          `源脚本执行后仍未注册 request 处理器（脚本可能不是上游自定义源格式，或自身校验未通过）。` +
           `${scriptErr}脚本长度 ${script.length}，已初始化 ${state.inited}，` +
           `发送事件 ${state.sendCalls.length > 0 ? state.sendCalls.join('、') : '无'}，` +
           `沙箱环境 ${state.env}。${envHint}沙箱状态 ${state.raw}`,
@@ -724,7 +724,7 @@ export class SourceEngine {
   /**
    * 根据源规则解析指定音乐的播放链接。
    *
-   * @param musicInfoJson 洛雪旧版 musicInfo 的 JSON 文本（与源脚本 request.info.musicInfo 一致）
+   * @param musicInfoJson 上游旧版 musicInfo 的 JSON 文本（与源脚本 request.info.musicInfo 一致）
    * @param quality       目标音质
    * @param source        平台 id（kw/kg/tx/wy/mg），需与 musicInfoJson.source 一致
    */
@@ -842,7 +842,7 @@ export class SourceEngine {
 
   /**
    * 源脚本里的 lx.request 会带着 requestKey 回调到宿主，这里用 LxHttp 发起真实请求，
-   * 拿到响应后再回灌沙箱的 requestQueue（对应洛雪的原生网络代理）。
+   * 拿到响应后再回灌沙箱的 requestQueue（对应上游的原生网络代理）。
    * 少了这一步，任何走 lx.request 的音源都不会有回调，表现为「音源响应超时」。
    */
   private handleNativeRequest(dataJson: string): void {
@@ -954,7 +954,7 @@ export class SourceEngine {
     }
   }
 
-  /** 把网络响应回灌沙箱（对应洛雪原生侧把结果写回 QuickJS 的 response 通道） */
+  /** 把网络响应回灌沙箱（对应上游原生侧把结果写回 QuickJS 的 response 通道） */
   private postResponseToSandbox(envelope: NativeResponseMessage): void {
     if (this.controller === null) {
       return;
@@ -1208,7 +1208,7 @@ interface LogData {
 
 /**
  * 判断源脚本是否为 ES Module。
- * 洛雪自定义源是普通脚本（由宿主 evaluate），ESM 需要 import/export，本引擎不支持。
+ * 上游自定义源是普通脚本（由宿主 evaluate），ESM 需要 import/export，本引擎不支持。
  */
 function looksLikeEsm(script: string): boolean {
   const head: string = script.substring(0, 6000);

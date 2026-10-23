@@ -25,7 +25,7 @@ const PREVIEW_SONGS: number = 6;
  *      由 core/music/PlaylistLink 认出平台与歌单 id；
  *   2. 在线歌单详情页的导入钮 —— 平台与 id 已经知道，直接带进来（presetSource/presetId）。
  *
- * 流程与洛雪一致：解析出平台+id 后先取一页做预览（歌单名/作者/曲目数），
+ * 流程与上游一致：解析出平台+id 后先取一页做预览（歌单名/作者/曲目数），
  * 用户确认再拉全量歌曲落成本地歌单（core/sync/LocalLibrary.importPlaylist）。
  * 同一个线上歌单导入过的话，这里会变成「更新已有歌单」——不会重复建列表。
  */

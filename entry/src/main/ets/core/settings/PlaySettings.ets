@@ -22,7 +22,7 @@ const SETTINGS_VERSION: number = 1;
  * AppStorage——界面用 @StorageLink 订阅即可实时响应，播放器侧直接读本单例。
  * 改动立即落盘，不做节流：这些都是用户点一下才变一次的低频操作，不存在写放大。
  *
- * 说明：洛雪本体把播放设置存在它的设置对象里（player.playQuality /
+ * 说明：上游本体把播放设置存在它的设置对象里（player.playQuality /
  * player.isHandleAudioFocus / playDetail.style.* 等）；本移植版原先只有缓存上限
  * 一项是真的，其余播放/歌词设置页还没接，这里把它们补齐并落盘，重启不丢。
  */
@@ -138,7 +138,7 @@ export class PlaySettings {
   private inited: boolean = false;
 
   // ---------------------------------------------------------------- 默认值
-  /** 播放音质：洛雪默认 128k；定制版默认 flac24bit（对应安卓版 defaultSetting player.playQuality） */
+  /** 播放音质：上游默认 128k；定制版默认 flac24bit（对应安卓版 defaultSetting player.playQuality） */
   private quality: string = 'flac24bit';
   /**
    * 拓展音质默认关：这几档多数平台要会员，拿不到链接时表现为「点了不出声」，
@@ -146,7 +146,7 @@ export class PlaySettings {
    */
   private extendQuality: boolean = false;
   private extendQualityType: string = 'hires';
-  /** 与其他应用同时播放默认关（独占音频焦点，与洛雪 isHandleAudioFocus=true 一致） */
+  /** 与其他应用同时播放默认关（独占音频焦点，与上游 isHandleAudioFocus=true 一致） */
   private playWithOthers: boolean = false;
   private showMiniLyric: boolean = false;
   private lyricBlur: boolean = true;
@@ -167,7 +167,7 @@ export class PlaySettings {
    *
    * 每换一句就要重推一次元数据、触发一次蓝牙侧的更新，华为官方明确提醒过
    * 「开启蓝牙歌词同步后可能导致车载播放音乐卡顿」——不在车里就不该付这个代价，
-   * 所以跟洛雪上游（player.isShowBluetoothLyric）一样默认关，要用时自己开。
+   * 所以跟上游上游（player.isShowBluetoothLyric）一样默认关，要用时自己开。
    */
   private bluetoothLyric: boolean = false;
   /**

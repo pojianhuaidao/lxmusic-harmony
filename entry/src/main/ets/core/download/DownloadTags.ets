@@ -2,7 +2,7 @@ import { http } from '@kit.NetworkKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { LxMusicInfo, fetchMusicPic } from '../music/MusicSearch';
 import { CachedLyricInfo, MediaCache, mediaKeyOf } from '../music/MediaCache';
-import { PlatformLyric, fetchPlatformLyric } from '../music/PlatformLyric';
+import { PlatformLyric, fetchPlatformLyricWithFallback } from '../music/PlatformLyric';
 import { asRecord, asString } from '../music/PlatformHttp';
 import { SourceEngine } from '../source/SourceEngine';
 
@@ -286,7 +286,7 @@ async function resolveLyric(info: LxMusicInfo | null, musicInfoJson: string): Pr
     }
   }
   try {
-    const result: PlatformLyric = await fetchPlatformLyric(info);
+    const result: PlatformLyric = await fetchPlatformLyricWithFallback(info);
     return mergeTranslation(result.lyric, result.tlyric);
   } catch (e) {
     hilog.warn(DOMAIN, TAG, 'platform lyric failed: %{public}s', (e as Error).message);

@@ -16,7 +16,7 @@ const SETTINGS_VERSION: number = 1;
  *
  * 存法与其它设置单例一致：JSON 落盘 + AppStorage 发布，界面用 @StorageLink 订阅。
  * 与其它设置不同的是落盘位置固定用 context.filesDir（应用私有沙箱）而不是
- * storageRootDir（公共 Download/LxMusicData）：协议同意是应用级合规标记，
+ * storageRootDir（公共 Download/MusicData）：协议同意是应用级合规标记，
  * 不能跟着公共目录被用户手动清理而丢失，也不依赖公共目录写权限。
  */
 export const K_AGREEMENT_ACCEPTED: string = 'cfg_agreement_accepted';

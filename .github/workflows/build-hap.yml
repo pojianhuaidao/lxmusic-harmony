@@ -1,7 +1,10 @@
-# 版本号规则（与 AppScope/app.json5 顶部注释一致）：
+# 版本号规则（硬性构建规则，详见 BUILD_RULES.md；与 AppScope/app.json5 顶部注释一致）：
 #   versionName = 1.MMDD.NN   （MMDD=构建月日，NN=当日序号，从 01 开始）
 #   versionCode = 1MMDDNN
+#   buildVersion = 1MMDDNN（与 versionCode 一致）
 # AppScope/app.json5 为唯一版本源，本地与 CI 出包必须一致，不得各自修改。
+# 本 workflow 在 Build HAP 步骤前通过 "Auto-generate version" 步骤自动生成版本号并
+# 写回 app.json5 三处字段（NN 取 GitHub Release 当日已有资产最大序号 +1），禁止手动改动。
 name: Build & Release (HAP + APP zip)
 
 on:
@@ -60,6 +63,36 @@ jobs:
           "$OHPM" config set registry https://ohpm.openharmony.cn/ohpm/
           "$OHPM" install
 
+      - name: Auto-generate version (1.MMDD.NN) & write AppScope/app.json5
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MMDD=$(date +%m%d)
+          # 当日序号 NN：查 GitHub Release(latest) 当日已有资产（music_1.MMDD.NN_*）的最大 NN +1，无则 01
+          MAX_NN=0
+          RELEASE_ID=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/latest" --jq '.id' 2>/dev/null || true)
+          if [ -n "$RELEASE_ID" ]; then
+            ASSETS=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq '.[] | .name' 2>/dev/null || true)
+            for A in $ASSETS; do
+              if [[ "$A" =~ music_1\.${MMDD}\.([0-9]{2})_ ]]; then
+                N=$((10#${BASH_REMATCH[1]}))
+                if [ "$N" -gt "$MAX_NN" ]; then MAX_NN="$N"; fi
+              fi
+            done
+          fi
+          NN=$((MAX_NN + 1))
+          if [ "$NN" -lt 1 ]; then NN=1; fi
+          if [ "$NN" -gt 99 ]; then echo "daily build count exceeds 99 (NN=$NN)" >&2; exit 1; fi
+          NNSTR=$(printf "%02d" "$NN")
+          VERNAME="1.${MMDD}.${NNSTR}"
+          VERCODE="1${MMDD}${NNSTR}"
+          python3 tools/ci/write_version.py "$VERNAME" "$VERCODE"
+          echo "version_name=${VERNAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERCODE}" >> "$GITHUB_OUTPUT"
+          echo "==> auto version: versionName=${VERNAME} / versionCode=${VERCODE} / buildVersion=${VERCODE} (写入 AppScope/app.json5)"
+
       - name: Build HAP
         env:
           DEVECO_SDK_HOME: ${{ env.HOS_SDK_HOME }}
@@ -76,9 +109,9 @@ jobs:
             echo "secrets.LXMUSIC_KEY_B64 not configured -> unsigned only" >&2
             exit 0
           fi
-          echo "$LXMUSIC_KEY_B64" | base64 -d > /tmp/lxmusic_key.zip
+          echo "$LXMUSIC_KEY_B64" | base64 -d > /tmp/music_key.zip
           mkdir -p key
-          (cd key && unzip -o -q /tmp/lxmusic_key.zip)
+          (cd key && unzip -o -q /tmp/music_key.zip)
           ls -la key/
 
       - name: Locate unsigned HAP & read version
@@ -114,10 +147,10 @@ jobs:
           HAP="${{ steps.meta.outputs.hap_path }}"
           VER="${{ steps.meta.outputs.version_name }}"
           SHORT="${{ steps.meta.outputs.short_sha }}"
-          UNSIGNED="lxmusic_${VER}_unsigned.hap"
+          UNSIGNED="music_${VER}_unsigned.hap"
           SIGNED="entry-default-signed.hap"
-          APP="lxmusic_${VER}_release.app"
-          ZIP="lxmusic_${VER}_${SHORT}_release.zip"
+          APP="music_${VER}_release.app"
+          ZIP="music_${VER}_${SHORT}_release.zip"
           PACK_INFO="entry/build/default/outputs/default/pack.info"
           mkdir -p dist
           cp "$HAP" "dist/${UNSIGNED}"
@@ -157,7 +190,7 @@ jobs:
       - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: lxmusic-harmony-release
+          name: music-harmony-release
           path: ${{ steps.bundle.outputs.zip_path }}
           if-no-files-found: error
 
@@ -191,13 +224,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: lxmusic-harmony ${{ steps.meta.outputs.version_name }} (${{ steps.meta.outputs.short_sha }})
+          name: 听·音乐 ${{ steps.meta.outputs.version_name }} (${{ steps.meta.outputs.short_sha }})
           body: |
             自动构建产物，基于 commit ${{ github.sha }}。
 
             压缩包内包含两个版本：
-            - **lxmusic_${{ steps.meta.outputs.version_name }}_unsigned.hap**：未签名 HAP，侧载/自装用
-            - **lxmusic_${{ steps.meta.outputs.version_name }}_release.app**：已签名 APP，AGC 测试分发用（AGC 仅支持 app，不支持 hap）
+            - **music_${{ steps.meta.outputs.version_name }}_unsigned.hap**：未签名 HAP，侧载/自装用
+            - **music_${{ steps.meta.outputs.version_name }}_release.app**：已签名 APP，AGC 测试分发用（AGC 仅支持 app，不支持 hap）
 
             下载 zip 解压后，按需使用对应文件。
           files: ${{ steps.bundle.outputs.zip_path }}

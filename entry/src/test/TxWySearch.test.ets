@@ -70,7 +70,7 @@ export default function txWySearchTest() {
 
     it('zzcSignMatchesReference', 0, () => {
       expect(createZzcSign(TX_SIGN_INPUT)).assertEqual(TX_SIGN_EXPECT);
-      // 洛雪 PART_1_INDEXES 含越界下标 40，原版靠 join 把 undefined 变空串 => part1 只有 7 位
+      // 上游 PART_1_INDEXES 含越界下标 40，原版靠 join 把 undefined 变空串 => part1 只有 7 位
       const sign: string = createZzcSign(TX_SIGN_INPUT);
       expect(sign.startsWith('zzc')).assertTrue();
       expect(sign.length < 3 + 8 + 32 + 8).assertTrue();
@@ -90,7 +90,7 @@ export default function txWySearchTest() {
       // searchid = 32 位大写 hex + 5 位数字
       const searchId: string = param['searchid'] as string;
       expect(searchId.length).assertEqual(37);
-      // 键顺序必须与洛雪一致（签名是对这个 JSON 串算的）
+      // 键顺序必须与上游一致（签名是对这个 JSON 串算的）
       expect(body.startsWith('{"comm":')).assertTrue();
       expect(body.indexOf('"music.search.SearchCgiService"') > body.indexOf('"wid"')).assertTrue();
     });
@@ -139,7 +139,7 @@ export default function txWySearchTest() {
       expect(info.songmid).assertEqual('186016');
       expect(info.interval).assertEqual('04:29');
       expect(info.img).assertEqual('https://p1.music.126.net/x.jpg');
-      // maxBrLevel=hires 且 maxbr=999000：洛雪 switch 穿透 => flac/320k/128k 全给
+      // maxBrLevel=hires 且 maxbr=999000：上游 switch 穿透 => flac/320k/128k 全给
       expect(hasQuality(info, 'flac24bit')).assertTrue();
       expect(hasQuality(info, 'flac')).assertTrue();
       expect(hasQuality(info, '320k')).assertTrue();

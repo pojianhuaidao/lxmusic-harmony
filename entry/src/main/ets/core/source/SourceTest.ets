@@ -26,7 +26,7 @@ interface DemoQualityInfo {
   size: string;
 }
 
-/** 测试用 musicInfo（洛雪旧版结构，与源脚本 request.info.musicInfo 一致） */
+/** 测试用 musicInfo（上游旧版结构，与源脚本 request.info.musicInfo 一致） */
 interface DemoMusicInfo {
   name: string;
   singer: string;

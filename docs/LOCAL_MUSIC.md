@@ -149,7 +149,7 @@ FAQ 里还有一条：应用被终止后（包括重启）该权限失效，重�
 - `mediaKeyOf()` 会算出 `local_<id>`，与 `downloadedFile()`、`AudioCache` 的键天然自洽；
 - 同步侧**已经就绪**：`SyncConvert.parseOldMusicInfo()` 里已有一条
   `if (info.source === 'local') { return null; }`，注释还写着「本地文件不在同步范围内
-  （洛雪也只同步在线歌曲）」—— 本地歌进任何列表都不会被上行。
+  （上游也只同步在线歌曲）」—— 本地歌进任何列表都不会被上行。
 
 存储：
 
@@ -210,7 +210,7 @@ if (!engine.isInited()) { ... }          // 原来的音源检查往后挪了
 | 播放页 / 迷你栏 / 灰段 | 支持 | 无（本地文件整条画满） |
 | 播控中心 / 锁屏 | 支持 | 无（AVSession 只看 `SongItem`） |
 | 封面 | 支持（内嵌封面） | 导入时用 AVMetadataExtractor 提取 |
-| 洛雪同步 | 天然排除（会被直接抛弃） | 无（`source === 'local'` 分支本来就在 `SyncConvert` 里）；同步设置页加了说明文字 |
+| 上游同步 | 天然排除（会被直接抛弃） | 无（`source === 'local'` 分支本来就在 `SyncConvert` 里）；同步设置页加了说明文字 |
 | 音质标签 / 下载 | 不适用 | 按 `source === 'local'` 显示「本地」/ 不显示下载项 |
 | 歌词 | 先不支持 | 可扩展：导入时找同名 `.lrc` 一并拷 |
 | 播放缓存 / 下一首预取 | 不适用 | 本地歌不入 `AudioCache`、不预取 |

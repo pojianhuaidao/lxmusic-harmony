@@ -1,7 +1,7 @@
 /**
  * LRC 歌词解析
  *
- * 洛雪源脚本的 `lyric` action 返回 `{ lyric, tlyric, rlyric, lxlyric }`，
+ * 上游源脚本的 `lyric` action 返回 `{ lyric, tlyric, rlyric, lxlyric }`，
  * 其中 `lyric` / `tlyric` 是标准 LRC 文本（`[mm:ss.xx]歌词`）。
  * 这里只做「有时间轴的行」：解析出时间与文本，可选的翻译按时间对齐到原文行。
  *

@@ -1,6 +1,6 @@
 'use strict'
 /**
- * 洛雪音源引擎 —— 无设备自检脚本
+ * 上游音源引擎 —— 无设备自检脚本
  *
  * 用 Node 模拟 ArkWeb 沙箱 + ArkTS 网络代理，直接跑 rawfile 里的
  * lx_utils.js / lx_preload.js / demo_source*.js，验证：
@@ -186,7 +186,7 @@ async function testPureUtils () {
   )
   check('AES-128-CBC/PKCS7 与 node:crypto 一致', Buffer.from(actualB64, 'base64').equals(expectedCipher))
 
-  // 洛雪的 aes-128-ecb 实际是 Java 的 "AES" = ECB/PKCS5Padding（带填充）
+  // 上游的 aes-128-ecb 实际是 Java 的 "AES" = ECB/PKCS5Padding（带填充）
   const ecbKey = crypto.randomBytes(16)
   const ecbPlain = crypto.randomBytes(37)
   const ecbCipher = crypto.createCipheriv('aes-128-ecb', ecbKey, null)

@@ -8,9 +8,9 @@ const DOMAIN: number = 0x0001;
 const TAG: string = 'MediaCache';
 
 /**
- * 元数据缓存（对应洛雪 utils/data.ts 里的 musicUrl / lyric / lyric_edited 三项）
+ * 元数据缓存（对应上游 utils/data.ts 里的 musicUrl / lyric / lyric_edited 三项）
  *
- * 洛雪把这几样塞进 AsyncStorage，键为：
+ * 上游把这几样塞进 AsyncStorage，键为：
  *   @music_url__<id>_<quality>  ->  播放地址字符串
  *   @lyric__<id>                ->  { lyric, tlyric, rlyric, lxlyric }
  *   @lyric__<id>_edited         ->  用户改过的歌词
@@ -22,7 +22,7 @@ const TAG: string = 'MediaCache';
  *   files/lx_media_cache/lyric_edited/<key>.json
  */
 
-/** 带时间轴的歌词才值得缓存（与洛雪 existTimeExp 一致）：纯文本词缓存下来也不会滚 */
+/** 带时间轴的歌词才值得缓存（与上游 existTimeExp 一致）：纯文本词缓存下来也不会滚 */
 const TIME_TAG: RegExp = /\[\d{1,2}:.*\d{1,4}\]/;
 
 const DIR_NAME: string = 'lx_media_cache';
@@ -33,7 +33,7 @@ const EDITED_DIR: string = 'lyric_edited';
 /** 地址表的落盘节流：连着播几首时不用每首都重写一遍索引 */
 const URL_SAVE_DELAY_MS: number = 1000;
 
-/** 缓存的歌词（洛雪只用到 lyric / tlyric 两个字段） */
+/** 缓存的歌词（上游只用到 lyric / tlyric 两个字段） */
 export interface CachedLyricInfo {
   lyric: string;
   tlyric: string;
@@ -46,7 +46,7 @@ function emptyLyric(): CachedLyricInfo {
 /**
  * 一首歌的缓存 key：`<平台>_<songmid>`
  *
- * 与洛雪的 `musicInfo.id` 等价（kg 的 id 是 `songmid_hash`，这里把 hash 一并带上，
+ * 与上游的 `musicInfo.id` 等价（kg 的 id 是 `songmid_hash`，这里把 hash 一并带上，
  * 保证同平台不同 hash 的条目不会串）。quality 只对播放地址有意义，单独拼。
  */
 export function mediaKeyOf(musicInfoJson: string): string {
@@ -115,10 +115,15 @@ export class MediaCache {
       this.ready = false;
       return;
     }
-    this.urls = this.loadMap(URL_FILE);
-    this.pics = this.loadMap(PIC_FILE);
-    hilog.info(DOMAIN, TAG, 'media cache ready, %{public}d url / %{public}d pic entries',
-      Object.keys(this.urls).length, Object.keys(this.pics).length);
+    // 缓存索引 JSON（urls / pics 映射）可能很大，同步 readTextSync + JSON.parse
+    // 会把冷启动主线程卡住（AGC AppFreeze THREAD_BLOCK_6S）；挪到首帧后异步加载，
+    // 播放 / 歌词查找 miss 时上层会走在线解析兜底，不影响首帧渲染。
+    setTimeout(() => {
+      this.urls = this.loadMap(URL_FILE);
+      this.pics = this.loadMap(PIC_FILE);
+      hilog.info(DOMAIN, TAG, 'media cache ready, %{public}d url / %{public}d pic entries',
+        Object.keys(this.urls).length, Object.keys(this.pics).length);
+    }, 0);
   }
 
   isReady(): boolean {
@@ -242,7 +247,7 @@ export class MediaCache {
    * 封面地址缓存
    *
    * 封面地址是「按平台接口现查」的（kw / kg 的搜索结果不带封面），列表里几百行
-   * 每次启动都要重新查一遍。洛雪是把 picUrl 写回 musicInfo（跟着同步走），
+   * 每次启动都要重新查一遍。上游是把 picUrl 写回 musicInfo（跟着同步走），
    * 这里单独缓存一份，效果相同但不污染同步数据。
    */
   getPic(key: string): string {
@@ -307,7 +312,7 @@ export class MediaCache {
   }
 
   /**
-   * 取缓存的歌词；没有 / 不带时间轴都返回 null（与洛雪 getCachedLyricInfo 的校验一致）
+   * 取缓存的歌词；没有 / 不带时间轴都返回 null（与上游 getCachedLyricInfo 的校验一致）
    */
   getLyric(key: string): CachedLyricInfo | null {
     if (!this.ready || key.length === 0) {

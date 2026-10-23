@@ -7,7 +7,7 @@ import { window, display } from '@kit.ArkUI';
 import { initialize as agConnectInitialize, JsonTypeInfo } from '@hw-agconnect/hmcore';
 import auth from '@hw-agconnect/auth';
 import { PlaybackService } from '../core/player/PlaybackService';
-import { PlaySession, K_OPEN_PLAYER_PENDING } from '../core/player/PlaySession';
+import { PlaySession } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
 import { WebDavLibrary } from '../core/webdav/WebDavLibrary';
 import { WebDavSettings } from '../core/webdav/WebDavSettings';
@@ -48,8 +48,8 @@ export default class EntryAbility extends UIAbility {
     if (want.action !== 'ohos.want.action.home') {
       hilog.info(DOMAIN, 'testTag', 'launched with action: %{public}s',
         want.action === undefined ? 'undefined' : want.action);
-      // 外部拉起（含通知栏媒体卡冷启动）：标记待直达播放页，Index 在 aboutToAppear 里消费
-      AppStorage.setOrCreate(K_OPEN_PLAYER_PENDING, true);
+      // 不再标记直达播放页：任何方式拉起都停留在推荐页（上架要求），
+      // 需要看播放页时由用户点迷你栏 / 歌曲项进入
     }
     // AGC 初始化：读取 rawfile 的 agconnect-services.json 并初始化核心 SDK
     // （华为账号授权 auth.signIn 依赖此初始化；失败只记日志，不阻断应用启动）
@@ -104,8 +104,7 @@ export default class EntryAbility extends UIAbility {
     // 避免 AGC 审核拉起（action 可能为空/非 home）被误杀成启动闪退。
     hilog.info(DOMAIN, 'testTag', 'Ability onNewWant, action: %{public}s',
       want.action === undefined ? 'undefined' : want.action);
-    // 通知栏媒体卡 / 系统拉起（热启动）：标记待直达播放页，Index 的 @Watch 会消费
-    AppStorage.setOrCreate(K_OPEN_PLAYER_PENDING, true);
+    // 不再标记直达播放页：热启动（媒体卡 / 系统拉起）也停留在当前页（推荐页）
     // 热启动无需重复初始化单例；仅记录拉起事件，供问题排查
   }
 
@@ -136,7 +135,7 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
 
-    // 洛雪移动端是「内容铺满、状态栏压在内容上」的观感，这里开全屏布局；
+    // 上游移动端是「内容铺满、状态栏压在内容上」的观感，这里开全屏布局；
     // 具体的安全区留白由页面自己读 AvoidArea 处理（见 pages/Index.ets）。
     // 状态栏字色按当前深浅模式给：启动窗口的底色是深色（dark 那份
     // start_window_background = #000000）时，黑字会整条看不见。

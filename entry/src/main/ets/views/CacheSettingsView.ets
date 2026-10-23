@@ -6,12 +6,12 @@ import { MediaCache } from '../core/music/MediaCache';
 /**
  * 缓存设置
  *
- * 对应洛雪的三个地方：
+ * 对应上游的三个地方：
  *   「设置 - 播放 - 最大缓存」  -> 播放缓存上限（这里叫播放缓存）
  *   「设置 - 其它 - 资源缓存」  -> 占用与一键清理
  *   「设置 - 其它 - 元数据缓存」-> 播放地址 / 歌词的条数与清理
  *
- * 说明一点差别：洛雪靠播放器自带的边播边缓存，上限是给播放器的；HarmonyOS 的
+ * 说明一点差别：上游靠播放器自带的边播边缓存，上限是给播放器的；HarmonyOS 的
  * AVPlayer 没有流式缓存，所以这里是「边播边把整首下到沙箱」，上限由我们自己的
  * LRU 淘汰执行（详见 core/music/AudioCache.ets）。
  *
@@ -422,7 +422,7 @@ export struct CacheSettingsView {
 
           this.sectionTitle('元数据缓存', '')
           this.metaCard()
-          Text('播放地址、歌词、封面地址都会缓存一份（对应洛雪的 @music_url / @lyric）：'
+          Text('播放地址、歌词、封面地址都会缓存一份（对应 @music_url / @lyric）：'
             + '播放过的歌再次播放不必重新解析，歌词不会因为源抽风而忽然没有，'
             + '封面也不必每次启动都为整张列表重新查一遍。')
             .fontSize(11.5)
@@ -445,7 +445,7 @@ export struct CacheSettingsView {
   }
 }
 
-/** 字节 -> 人话（与洛雪 sizeFormate 的观感一致） */
+/** 字节 -> 人话（与上游 sizeFormate 的观感一致） */
 function sizeText(bytes: number): string {
   if (bytes <= 0) {
     return '0 B';

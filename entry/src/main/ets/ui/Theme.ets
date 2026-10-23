@@ -1,7 +1,7 @@
 /**
- * 视觉规范（照洛雪移动端取色）
+ * 视觉规范（参照主流音乐 App 取色）
  *
- * 洛雪的移动端是「浅灰底 + 纯白卡片 + 高饱和红强调色」的一套 Material 风格，
+ * 移动端主流音乐 App 是「浅灰底 + 纯白卡片 + 高饱和红强调色」的一套 Material 风格，
  * 底部导航、迷你播放器、全屏播放器这几层是悬浮的半透明玻璃层。
  *
  * **每个颜色都是资源 token（`$r('app.color.xxx')`），不是写死的十六进制**：
@@ -35,7 +35,7 @@ export const C_TEXT: Resource = $r('app.color.c_text');
 export const C_TEXT_SUB: Resource = $r('app.color.c_text_sub');
 /** 更弱的文字（占位、计数） */
 export const C_TEXT_WEAK: Resource = $r('app.color.c_text_weak');
-/** 强调色（洛雪红） */
+/** 强调色（华为红，与图标红橙渐变呼应） */
 export const C_RED: Resource = $r('app.color.c_red');
 /** 强调色的淡底（12%）：标签、重试钮这类小面积色块 */
 export const C_RED_TINT: Resource = $r('app.color.c_red_tint');

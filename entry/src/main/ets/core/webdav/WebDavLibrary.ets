@@ -130,7 +130,7 @@ export interface FolderGroup {
  * 所以下次进应用列表是现成的，只有服务器上真的变了才需要重扫。
  *
  * 与「本地音乐」（LocalMusic）的关系：
- *   - 相同：都往歌单 / 收藏里走**非同步侧表**（SongSideTable），都不参与洛雪同步；
+ *   - 相同：都往歌单 / 收藏里走**非同步侧表**（SongSideTable），都不参与上游同步；
  *     元数据、封面、歌词的取法思路一致（同目录的封面与 `.lrc` 优先，其次平台匹配）。
  *   - 不同：本地音乐是「导入式」（Picker 的 URI 只有临时权限，必须拷进沙箱），
  *     云端音乐**不落音频副本** —— 服务器随时可请求，播放时带 Authorization 头直接流播，
@@ -183,7 +183,12 @@ export class WebDavLibrary implements SongSideTable {
       this.ready = false;
       return;
     }
-    this.load();
+    // 云端音乐库索引 JSON（歌曲 / 歌单侧表）可能很大，同步 readTextSync + JSON.parse
+    // 会把冷启动主线程卡住（AGC AppFreeze THREAD_BLOCK_6S）；挪到首帧后异步加载，
+    // WebDAV 音乐页 / 歌单侧表在进入页面时再读（那时早已就绪），无需界面改动。
+    setTimeout(() => {
+      this.load();
+    }, 0);
   }
 
   isReady(): boolean {

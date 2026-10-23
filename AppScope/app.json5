@@ -6,10 +6,10 @@
 {
   "app": {
     "bundleName": "music.hm.op",
-    "vendor": "example",
-    "versionCode": 1102001,
-    "versionName": "1.1020.01",
-    "buildVersion": "1102001",
+    "vendor": "伍修骏",
+    "versionCode": 1102301,
+    "versionName": "1.1023.01",
+    "buildVersion": "1102301",
     "icon": "$media:layered_image",
     "label": "$string:app_name",
     "cloudFileSyncEnabled": true

@@ -42,10 +42,10 @@ export class SyncManager {
     this.library.init(context);
     PlaySession.getInstance().setLibrarySink(this.library);
 
-    // 已经落过库就先镜像到界面（收藏 / 试听列表），没落过库就什么都不铺、界面是空的
-    if (this.library.isInitialized()) {
-      this.library.mirrorToSession();
-    }
+    // 库的加载已挪到首帧后异步（见 LocalLibrary.init 内的 setTimeout）：读歌单 / 收藏
+    // JSON 可能很大，同步执行会把冷启动主线程卡住（AGC AppFreeze THREAD_BLOCK_6S）。
+    // 加载完成后由 LocalLibrary 自己 mirrorToSession（递增 K_LIBRARY_VERSION、镜像到
+    // PlaySession），这里不再同步判断 / 镜像，避免首帧前读库。
     hilog.info(DOMAIN, TAG, 'sync manager inited');
   }
 

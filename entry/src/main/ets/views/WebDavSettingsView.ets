@@ -413,7 +413,7 @@ export struct WebDavSettingsView {
           this.libraryCard()
           HintText({ text: '曲库就是「上次扫描的结果」这份缓存：服务器上的文件不归这个应用管，'
             + '要拿掉什么直接在服务器上删、然后重新扫描。'
-            + '云端音乐不参与洛雪同步（与本地音乐一致：同步只传在线歌曲）；'
+            + '云端音乐不参与同步（与本地音乐一致：同步只传在线歌曲）；'
             + '歌单与收藏里的云端歌存在「非同步侧表」里，上行时不会发出去。' })
 
           Column().height(this.bottomInset + 20).width('100%')

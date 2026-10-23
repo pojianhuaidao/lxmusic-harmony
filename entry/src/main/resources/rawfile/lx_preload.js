@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * 洛雪音乐自定义音源执行引擎（HarmonyOS / ArkWeb 移植版）
+ * 上游项目自定义音源执行引擎（HarmonyOS / ArkWeb 移植版）
  *
  * 移植自 lx-music-mobile:
  *   android/app/src/main/assets/script/user-api-preload.js
@@ -155,7 +155,7 @@
     local: [],
   }
   // 官方 preload 只给平台源 musicUrl，等于把源自带的 lyric/pic 能力过滤掉了
-  // （洛雪自己不用源的歌词，它走内置平台 SDK）。本工程把源当作「能给就给」的一路：
+  // （上游自己不用源的歌词，它走内置平台 SDK）。本工程把源当作「能给就给」的一路：
   // 源声明了 lyric/pic 就允许透传，拿不到再由宿主的内置平台歌词 / 封面接口兜底。
   const supportActions = {
     kw: ['musicUrl', 'lyric', 'pic'],
@@ -400,7 +400,7 @@
       Object.defineProperty(global, gname, { value: undefined, writable: false, configurable: false })
     } catch (e) { /* ignore */ }
   }
-  // 注意：不主动禁用 eval。洛雪 mobile 的 QuickJS 沙箱不禁用 eval；
+  // 注意：不主动禁用 eval。上游 mobile 的 QuickJS 沙箱不禁用 eval；
   // 部分混淆音源（如独家音源V6）初始化依赖 eval 解码，禁用会导致其
   // 初始化静默失败、不注册 request handler，点播放提示"最后一次响应请求失败"。
   // eval 为 ArkWeb 引擎原生提供，此处不再覆盖。

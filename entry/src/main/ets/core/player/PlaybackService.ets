@@ -80,7 +80,7 @@ export interface PlaybackMediaInfo {
  *  - 歌词：AVMetadata.lyric 传**标准 LRC**（带时间标签），系统自己按时间轴滚动显示；
  *    同一份数据也是系统「桌面歌词」悬浮窗的来源，见 setupDesktopLyric。
  *  - 收藏：注册 toggleFavorite 指令 + 回写 AVPlaybackState.isFavorite，
- *    播控中心那颗心就是本应用的收藏（对应洛雪的「我的收藏」）。
+ *    播控中心那颗心就是本应用的收藏（对应上游的「我的收藏」）。
  *  - 循环模式：注册 setLoopMode 指令 + 回写 AVPlaybackState.loopMode。
  *
  * 另外还给**蓝牙设备**（车机、蓝牙音箱）供了一份歌词：AVMetadata.singleLyricText

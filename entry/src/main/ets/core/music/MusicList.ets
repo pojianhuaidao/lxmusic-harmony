@@ -22,22 +22,22 @@ import { musicIdOf } from './MusicId';
 /**
  * 内置「歌单广场 / 排行榜」（宿主侧）
  *
- * 为什么需要它：与搜索同理，洛雪自定义源的协议里只有 musicUrl / lyric / pic，
- * 歌单与排行榜来自洛雪 App 内置的平台 SDK（src/utils/musicSdk/{kw,kg,tx,wy,mg}/
+ * 为什么需要它：与搜索同理，上游自定义源的协议里只有 musicUrl / lyric / pic，
+ * 歌单与排行榜来自上游 App 内置的平台 SDK（src/utils/musicSdk/{kw,kg,tx,wy,mg}/
  * songList.js 与 leaderboard.js），所以这里把那部分逻辑移植到 ArkTS。
  *
  * 与搜索的关系：这边只负责「拿到一份 musicInfo 列表」，播放链接照旧交给导入的源规则解析。
- * 榜单列表（getBoards）在洛雪里就是各平台写死的数组，这里一并照搬（只保留有名字的前若干条）。
+ * 榜单列表（getBoards）在上游里就是各平台写死的数组，这里一并照搬（只保留有名字的前若干条）。
  *
- * ⚠️ 网易(wy)：洛雪走 weapi（AES-CBC 双层 + RSA）与 linuxapi，本工程没有移植这套
- * 签名（RSA 未实现），且洛雪那边的 wy 端点已被标记为过期。这里改用网易的明文 web 接口
+ * ⚠️ 网易(wy)：上游走 weapi（AES-CBC 双层 + RSA）与 linuxapi，本工程没有移植这套
+ * 签名（RSA 未实现），且上游那边的 wy 端点已被标记为过期。这里改用网易的明文 web 接口
  * （/api/playlist/list、/api/v6/playlist/detail）做「尽力而为」的实现，可能失效；
  * 失效时界面会显示该平台的错误信息，不影响其它来源。
  */
 
 // ------------------------------------------------------------------ 类型
 
-/** 歌单页的排序页签（对应洛雪 sortList） */
+/** 歌单页的排序页签（对应上游 sortList） */
 export interface LxSortItem {
   name: string;
   tid: string;
@@ -200,7 +200,7 @@ export function descText(raw: string): string {
   return kept.join('\n');
 }
 
-/** 洛雪的 formatPlayCount：播放量 -> 「1.2万 / 3.4亿」 */
+/** 上游的 formatPlayCount：播放量 -> 「1.2万 / 3.4亿」 */
 function formatPlayCount(num: number): string {
   if (!num) {
     return '';
@@ -214,7 +214,7 @@ function formatPlayCount(num: number): string {
   return `${num}`;
 }
 
-/** 毫秒时间戳 -> YYYY-MM-DD（洛雪的 dateFormat(x, 'Y-M-D')） */
+/** 毫秒时间戳 -> YYYY-MM-DD（上游的 dateFormat(x, 'Y-M-D')） */
 function dateFormat(ms: number): string {
   if (!ms || ms <= 0) {
     return '';
@@ -227,7 +227,7 @@ function dateFormat(ms: number): string {
 }
 
 /**
- * 歌手数组按字段名拼接（洛雪的 formatSingerName(singers, key)）。
+ * 歌手数组按字段名拼接（上游的 formatSingerName(singers, key)）。
  * 内置搜索里的 formatSingerName 固定取 name 字段，酷狗榜单的字段叫 author_name，
  * 所以这里单独来一个带字段名的版本。
  */
@@ -481,7 +481,7 @@ export interface PlaylistDetailProgress {
 const MAX_DETAIL_PAGES: number = 40;
 
 /**
- * 歌单的全部歌曲（对应洛雪的 getListDetailAll）
+ * 歌单的全部歌曲（对应上游的 getListDetailAll）
  *
  * 各平台一页给多少差别很大：酷我一次 1000 首、网易一次最多 1000 首、酷狗与 QQ
  * 不分页（一次给全），只有咪咕是一页 30 首。所以这里统一翻页，并且以
@@ -721,7 +721,7 @@ function kwFilterSongs(rawList: Object[]): LxMusicInfo[] {
 /** 酷我榜单：请求体按 wbdCrypto 的规则加密（JSON 原文 -> AES-128-ECB -> base64 + md5 签名） */
 function kwBuildWbdParam(requestBody: Record<string, Object>): string {
   const keyBytes: number[] = fromBase64(KW_WBD_KEY);
-  // 明文必须是 JSON 原文字节。洛雪那行 `Buffer.from(JSON.stringify(x)).toString('base64')`
+  // 明文必须是 JSON 原文字节。上游那行 `Buffer.from(JSON.stringify(x)).toString('base64')`
   // 看着是先把 JSON 变成 base64 再加密，但它的 aesEncryptSync 入参本身按 base64 解码，
   // 两步抵消后加密的就是 JSON 原文；照字面喂 base64 文本，服务端会回 DECRYPT_ERROR。
   const plainBytes: number[] = utf8Bytes(JSON.stringify(requestBody));
@@ -1172,7 +1172,7 @@ function mgFormatToQuality(formatType: string): string {
 /**
  * 咪咕的音质条目里，文件大小字段名有两套：
  * 详情接口（audioFormats）用 isize/asize，榜单接口（newRateFormats）用 size，
- * 洛雪那边只写 size/androidSize，实际会取到 0，界面上显示成 0 B。
+ * 上游那边只写 size/androidSize，实际会取到 0，界面上显示成 0 B。
  */
 function mgSizeOf(format: Record<string, Object>): string {
   const candidates: string[] = ['size', 'androidSize', 'isize', 'asize'];
@@ -1300,10 +1300,10 @@ const TX_MUSICU: string = 'https://u.y.qq.com/cgi-bin/musicu.fcg' +
   '&platform=wk_v15.json&needNewCode=0';
 /** POST 用的 musicu 端点：新版歌单详情把参数放在请求体里，query 那些参数不需要 */
 const TX_MUSICU_BARE: string = 'https://u.y.qq.com/cgi-bin/musicu.fcg';
-/** 新版歌单详情一次取多少首（洛雪 getListDetail2 的 song_num） */
+/** 新版歌单详情一次取多少首（上游 getListDetail2 的 song_num） */
 const TX_DISS_SONG_NUM: number = 1000;
 
-/** 新版歌单详情（musicu）的请求体，字段照抄洛雪 tx/songList.js 的 getListDetail2 */
+/** 新版歌单详情（musicu）的请求体，字段照抄上游 tx/songList.js 的 getListDetail2 */
 interface TxDissInfoParam {
   disstid: number;
   userinfo: number;
@@ -1439,7 +1439,7 @@ function txFilterPlaylists(rawList: Object[]): LxPlaylistItem[] {
 /**
  * QQ 歌单详情
  *
- * 两条路都留着，但顺序与洛雪相反：洛雪先打老的 fcg_ucc_getcdinfo_byids_cp、
+ * 两条路都留着，但顺序与上游相反：上游先打老的 fcg_ucc_getcdinfo_byids_cp、
  * 失败再走新版 musicu；实测老接口已经下线（code=-1，见 tools/live_list_probe.js），
  * 所以这里新版优先、老接口兜底。两条路的 songlist 是同一套字段，共用 txFilterSongs。
  */
@@ -1451,7 +1451,7 @@ async function txPlaylistDetail(id: string): Promise<LxListDetail> {
   }
 }
 
-/** 新版：music.srfDissInfo.aiDissInfo / uniform_get_Dissinfo（洛雪 tx/songList.js 的 getListDetail2） */
+/** 新版：music.srfDissInfo.aiDissInfo / uniform_get_Dissinfo（上游 tx/songList.js 的 getListDetail2） */
 async function txPlaylistDetailMusicu(id: string): Promise<LxListDetail> {
   const param: TxDissInfoParam = {
     disstid: asNumber(id),
@@ -1656,7 +1656,7 @@ const WY_HEADERS: Record<string, string> = {
 
 /**
  * 网易推荐歌单。
- * 洛雪走 weapi 加密，这里用明文 /api 接口（不加密、不登录），能通就通，不通会抛错。
+ * 上游走 weapi 加密，这里用明文 /api 接口（不加密、不登录），能通就通，不通会抛错。
  */
 async function wyPlaylists(page: number): Promise<LxPlaylistItem[]> {
   const offset: number = 30 * (page - 1);
@@ -1789,7 +1789,7 @@ function wySizeOf(item: Record<string, Object>, key: string): string {
 
 // ================================================================== 榜单数据
 //
-// 洛雪各平台的榜单列表就是写死的数组（上游的 getBoards 也是返回这个数组），
+// 上游各平台的榜单列表就是写死的数组（上游的 getBoards 也是返回这个数组），
 // 这里只保留有名字的前若干张榜 —— 排在后面的多是「XX 地区榜 / 语种榜」这类长尾。
 
 function boardsOf(source: string, pairs: string[][]): LxBoardItem[] {

@@ -35,7 +35,7 @@ export interface CollectedPlaylist {
   meta: string;
 }
 
-/** 收藏记录的主键：与洛雪那套 sourceListId 同一个口径（`${平台}__${歌单id}`） */
+/** 收藏记录的主键：与上游那套 sourceListId 同一个口径（`${平台}__${歌单id}`） */
 export function collectedKeyOf(source: string, id: string): string {
   return `${source}__${id}`;
 }
@@ -48,11 +48,11 @@ interface CollectedData {
 /**
  * 收藏歌单（收藏**线上**歌单）
  *
- * 与「收藏的歌」是两件事：后者是洛雪的 loveList（`PlaySession.favorites`，
+ * 与「收藏的歌」是两件事：后者是上游的 loveList（`PlaySession.favorites`，
  * 一张内置歌单、参与同步）；这里收藏的是推荐页上**别人的**歌单，只是记下
  * 「哪个平台的哪张歌单」，点开还是走在线详情页（不落成本地歌单 —— 那是「歌单导入」）。
  *
- * 为什么是纯本地：洛雪的同步协议里没有歌单级的收藏 —— `ListData` 只有
+ * 为什么是纯本地：上游的同步协议里没有歌单级的收藏 —— `ListData` 只有
  * defaultList / loveList / userList 三段。所以这一份存在本机，不碰协议。
  *
  * 存法照 core/settings/AppearanceSettings：一份 JSON 落应用沙箱 + 一个 AppStorage

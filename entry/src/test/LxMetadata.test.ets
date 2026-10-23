@@ -49,7 +49,7 @@ export default function lxMetadataTest() {
     it('truncatesOverlongFields', 0, () => {
       const longName: string = 'x'.repeat(100);
       const info = buildSourceInfo(`/*\n * @name ${longName}\n */\n`);
-      // 洛雪对 name 的限制是 24 个字符 + '...'
+      // 上游对 name 的限制是 24 个字符 + '...'
       expect(info.name.length).assertEqual(27);
     });
   });

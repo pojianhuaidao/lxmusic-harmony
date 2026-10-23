@@ -6,6 +6,9 @@ import { HdsFlowLightBackground } from '../ui/Hds';
 import { immersiveMaterialFor, thinGlass } from '../ui/Glass';
 import { K_FLOW_LIGHT, K_MATERIAL_LEVEL } from '../core/settings/AppearanceSettings';
 
+/** 底部栏收起/展开触发阈值（vp）：同方向累计滚动超过它才切换状态 */
+const FOLD_THRESHOLD: number = 24;
+
 /** 在线排行榜卡片 */
 @Component
 struct RankCard {
@@ -183,7 +186,7 @@ export const K_RECOMMEND_SOURCE: string = 'recommend_source';
 /**
  * 推荐页
  *
- * 对应洛雪的「歌单」页 + 「排行榜」页合起来的那块内容：
+ * 对应上游的「歌单」页 + 「排行榜」页合起来的那块内容：
  *   顶部是来源（酷我 / 酷狗 / 咪咕 / QQ / 网易）与排序页签（最新 / 最热 / 推荐…），
  *   下面是该来源的在线榜单（横向卡片）和推荐歌单（列表）。
  *   点榜单卡片或歌单进「在线详情页」，在那里播放全部或挑某一首。
@@ -199,6 +202,39 @@ export struct RecommendView {
   };
   onOpenOnline: (route: OnlineRoute) => void = () => {
   };
+  /** 壳层底部栏收起/展开回调：内容下滑（offset 增大）传 true 收起，上滑传 false 展开 */
+  onFoldChange: (folded: boolean) => void = () => {
+  };
+  /** 上次滚动偏移量 / 向下(收起)累计 / 向上(展开)累计：同方向累计超过阈值才回调一次 */
+  private foldAccumDown: number = 0;
+  private foldAccumUp: number = 0;
+
+  /**
+   * 把滚动增量上报给壳层：内容向上滚（手指上滑浏览，yOffset 为正）累计超过阈值 → 收起并排，
+   * 内容向下滚（回顶，yOffset 为负）累计超过阈值 → 展开两行。
+   *
+   * 华为文档明确 onScroll 回调的 xOffset/yOffset 是「相对上一帧的增量」而非绝对偏移，
+   * 所以这里直接消费增量即可（不要再用 lastFoldY 做差，那会把增量二次求差、永远≈0，
+   * 导致下拉/上拉都触发不了收展）。同一方向连续累计，超过 FOLD_THRESHOLD vp 才回调一次；
+   * 出现另一方向时立即清零对方累计 —— 轻微抖动、松手惯性回弹（几 vp）都不会误触。
+   */
+  private handleFoldScroll(delta: number): void {
+    if (delta > 0) {
+      this.foldAccumUp = 0;
+      this.foldAccumDown += delta;
+      if (this.foldAccumDown >= FOLD_THRESHOLD) {
+        this.foldAccumDown = 0;
+        this.onFoldChange(true);
+      }
+    } else if (delta < 0) {
+      this.foldAccumDown = 0;
+      this.foldAccumUp += -delta;
+      if (this.foldAccumUp >= FOLD_THRESHOLD) {
+        this.foldAccumUp = 0;
+        this.onFoldChange(false);
+      }
+    }
+  }
   /** 当前推荐来源，切走再回来保持上次选的平台（改值的是标题栏里那颗来源胶囊） */
   @StorageLink(K_RECOMMEND_SOURCE) @Watch('onPlatformChanged') platform: string = 'kw';
   /** 首页是否挂 HDS 背景流光（外观设置里可关，关掉就不挂这一层） */
@@ -624,6 +660,9 @@ export struct RecommendView {
          * 能正常进入到标题栏底下、透过透明标题栏显示出来。
          */
         .contentStartOffset(this.topInset + 6)
+        .onScroll((_xOffset: number, yOffset: number) => {
+          this.handleFoldScroll(yOffset);
+        })
         .onReachEnd(() => {
           void this.loadMore();
         })

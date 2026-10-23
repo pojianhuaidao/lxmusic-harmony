@@ -2,6 +2,17 @@
 AIGC:
     Label: "1"
     ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 67425aee6b41b6be2f991b4754092804_84af7e99ce7e11f1a475525400248c00
+    ReservedCode1: ihDDKprouAJjNJwDLCDx1WI3AiZvvDuyZFYVwV6S+YOUCVgSEOplVikjiw8IX5CbwYfNrbbCcRGnRo7UDiiJeeYuv3yTE2cz8IRivo/4EnYjLZddXKr9t9MFw3Uf5ydpBWq5FabS3wXlffqT7DY96riCKohypKd3fJAqS99r4fFqWj35MiEJP/9tt6U=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 67425aee6b41b6be2f991b4754092804_84af7e99ce7e11f1a475525400248c00
+    ReservedCode2: ihDDKprouAJjNJwDLCDx1WI3AiZvvDuyZFYVwV6S+YOUCVgSEOplVikjiw8IX5CbwYfNrbbCcRGnRo7UDiiJeeYuv3yTE2cz8IRivo/4EnYjLZddXKr9t9MFw3Uf5ydpBWq5FabS3wXlffqT7DY96riCKohypKd3fJAqS99r4fFqWj35MiEJP/9tt6U=
+---
+
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
     ProduceID: 67425aee6b41b6be2f991b4754092804_af6bf82ec93d11f18b7f525400393706
     ReservedCode1: 0/KizmwRWpMOpYtS3frwx2ynsOBrVzIU0yMjcwN70NRDwMprVGOd9iMPfF1gZzvjCNBaObar6FkWzlDJixgfaQO3BHjg7BQKoBiuisKVy7w2zihtZ2hQSintP5jPCcgXXKfuCWK+WrAsLSyR7Uv+gD2V4HUDee5jhrvKuCpNWRHcfpHhVPzZz3+mXJY=
     ContentPropagator: 001191440300708461136T1XGW3
@@ -20,7 +31,7 @@ AIGC:
 
 | 项 | 值 |
 |---|---|
-| 项目 | lxmusic-harmony（洛雪音乐鸿蒙移植版，已删内置音源） |
+| 项目 | lxmusic-harmony（上游项目鸿蒙移植版，已删内置音源） |
 | GitHub | https://github.com/pojianhuaidao/lxmusic-harmony.git（账号 pojianhuaidao） |
 | 包名（硬性） | music.hm.op |
 | 当前版本 | 1.1020.01（AppScope/app.json5 三处一致：versionCode=1102001 / versionName=1.1020.01 / buildVersion=1102001，已开 cloudFileSyncEnabled=true） |
@@ -56,7 +67,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 
 - `-Build` 内部已自动执行 `node hvigor.js clean` 后再 assembleApp，规避增量缓存坑（见 §5.1）。
 - 产物落在 output\，按版本号命名；`-SkipBuild` 仅用于构建已完成后跳过编译直接复制打包。
-- 出包前必改：AppScope/app.json5 三处版本号；若 AGC 配置变更，同时覆盖 rawfile\agconnect-services.json。
+- 版本号由脚本构建前自动生成（1.MMDD.NN，当日序号取 output\ 已有产物最大 NN +1）并写回 AppScope/app.json5 三处，**禁止手动修改版本号**；若 AGC 配置变更，同时覆盖 rawfile\agconnect-services.json。
 - 验证产物：解包 entry\build\default\outputs\default\entry-default-unsigned.hap，读 module.json 的 versionName/versionCode/buildVersion 与 app.json5 一致。
 
 ## 5. 关键排障记录（本次重点）
@@ -86,8 +97,8 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 ### 5.4 备份"卡住不动"根因与云空间改造（2026-10-20，1.1020.01）
 - 根因：原备份走 AGC Cloud Storage（@hw-agconnect 云存储），上传到的是 **AGC 项目作者空间**，不是使用者自己的华为云空间；且 waitForComplete 无超时兜底，遇到上传挂起时界面永远"正在备份到华为云端..."。
 - 改造：备份/恢复改为 **华为云空间端云文件协同（cloudSync.FileSync + el2/cloud 目录）**，数据进使用者本人华为账号的云空间（AppScope/app.json5 已开 cloudFileSyncEnabled=true）。
-  - CLOUD_DIR = /data/storage/el2/cloud/lxmusic_backups；备份写 lx_data_hw.lxmc 后调 fileSync.start() 触发同步，轮询 getCoreFileSyncState 至 UPLOAD_SUCCESS（120s 超时兜底）。
-  - 恢复优先读云空间目录，失败回退本地端侧镜像（huawei_backup/lx_data_hw.lxmc，兼容旧数据）。
+  - CLOUD_DIR = /data/storage/el2/cloud/music_backups；备份写 music_data_hm.mbak（品牌切割后统一命名；旧名 lx_data_hw.lxmc 仅恢复时兼容）后调 fileSync.start() 触发同步，轮询 getCoreFileSyncState 至 UPLOAD_SUCCESS（120s 超时兜底）。
+  - 恢复优先读云空间目录，失败回退本地端侧镜像（huawei_backup/music_data_hm.mbak，兼容旧数据 lx_data_hw.lxmc）。
   - ensureCloudDir 改为 accessSync 先判再 mkdirSync，避免 File exists 误报；本地镜像 mkdirSync 加 true（存在不报错）。
   - 依赖用户在系统「设置 -> 云空间」中打开本应用的同步开关，备份失败提示文案已写明。
 - 构建环境要点（本机 DevEco 装在 **D:\Program Files\Huawei\DevEco Studio**，非 C 盘）：
@@ -99,7 +110,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 
 | 文件 | 改动 |
 |---|---|
-| entry\src\main\ets\core\account\HuaweiAccount.ets | 云备份改走 AGC Cloud Storage 真云上传（lxmusic_backups）；恢复双根目录（公共根+沙箱根）；readSync ArrayBuffer + decodeToString Uint8Array 修复；backup(scope) 勾选范围 |
+| entry\src\main\ets\core\account\HuaweiAccount.ets | 云备份改走 AGC Cloud Storage 真云上传（music_backups）；恢复双根目录（公共根+沙箱根）；readSync ArrayBuffer + decodeToString Uint8Array 修复；backup(scope) 勾选范围 |
 | entry\src\main\ets\core\account\WebDavBackup.ets | BackupScope 枚举 + 音源纳入 + BACKUP_VERSION 升 v2 |
 | entry\src\main\ets\core\local\SourceStore.ets | 新增 exportBundle / importBundle（索引+脚本正文+active） |
 | entry\src\main\ets\views\BackupOptionsView.ets | 备份内容勾选 UI（5 个 @State + buildScope()） |
@@ -115,7 +126,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 
 | 文件 | 改动 |
 |---|---|
-| entry\src\main\ets\core\account\HuaweiAccount.ets | 备份/恢复弃用 AGC Cloud Storage，改华为云空间端云文件协同：CLOUD_DIR=/data/storage/el2/cloud/lxmusic_backups，backup() 写云目录 + triggerSyncAndWait() 轮询 UPLOAD_SUCCESS（120s 超时兜底），restore() 云端优先本地镜像回退；ensureCloudDir accessSync 先判；本地镜像 mkdirSync(true)；清理 request import；throw e 改 throw new Error |
+| entry\src\main\ets\core\account\HuaweiAccount.ets | 备份/恢复弃用 AGC Cloud Storage，改华为云空间端云文件协同：CLOUD_DIR=/data/storage/el2/cloud/music_backups，backup() 写云目录 + triggerSyncAndWait() 轮询 UPLOAD_SUCCESS（120s 超时兜底），restore() 云端优先本地镜像回退；ensureCloudDir accessSync 先判；本地镜像 mkdirSync(true)；清理 request import；throw e 改 throw new Error |
 | entry\src\main\ets\core\account\BackupOptionsView.ets | 按钮/提示/状态文案"华为云端/作者空间"改"华为云空间/你的华为云空间"，说明需在系统云空间打开同步开关 |
 | entry\src\main\ets\core\account\HuaweiAccountSheet.ets | 同文案修正 |
 | AppScope\app.json5 | 版本 1.1020.01（versionCode/buildVersion 1102001）+ 新增 cloudFileSyncEnabled=true |
@@ -123,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 
 ## 7. 待办 / 验证清单（下次接手优先做）
 
-1. **AGC 内测验证（最高优先）**：上传 output\lxmusic_1.1020.01_release.app 到 AGC 内测分发，验证：华为账号登录态、云空间备份/恢复（勾选范围 + 音源）、下载设置显示公共目录。重点验证备份数据确实进入**使用者本人华为账号的云空间**（系统云空间可见 lxmusic_backups/lx_data_hw.lxmc）。
+1. **AGC 内测验证（最高优先）**：上传 output\lxmusic_1.1020.01_release.app 到 AGC 内测分发，验证：华为账号登录态、云空间备份/恢复（勾选范围 + 音源）、下载设置显示公共目录。重点验证备份数据确实进入**使用者本人华为账号的云空间**（系统云空间可见 music_backups/music_data_hm.mbak）。
 2. 若登录异常：从 AGC 控制台重导出最新 agconnect-services.json 覆盖 rawfile（解决 client_secret/api_key/code 不一致）再出包。
 3. AGC 复检子页面底部若仍 <28vp，补 padding。
 4. 本地未跟踪目录 `.sync_temp_dir/` 与 `图标/` 未提交，需决定忽略或入库（目前保持原状）。
@@ -133,6 +144,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 - 包名固定 music.hm.op；华为账号云备份必须是真实云端，不允许本地镜像冒充；备份数据存储在使用者自己的华为云空间（使用者账号对应的个人云空间，华为云空间端云文件协同 el2/cloud），不是作者空间。
 - 备份内容必须可选（歌单/收藏/播放列表/不喜欢/音源），音源（自建/导入脚本）必须纳入可选项。
 - 主页只保留一条播放条；协议文案用 AGC 真实内容。
-- 版本号按当天日期 MMDD 递增且与构建产物一致。
+- 版本号必须是硬性构建规则：构建（本地 build_sign.ps1 / DevEco / CI build-hap.yml）时自动按 1.MMDD.NN 生成并写入唯一版本源 AppScope/app.json5 三处，禁止手动改版本号；构建产物版本必须与 app.json5 一致（见 BUILD_RULES.md）。
 - 出包链路走 build_sign.ps1 官方链路，不手搓签名。
+*（内容由AI生成，仅供参考）*
 *（内容由AI生成，仅供参考）*

@@ -8,7 +8,7 @@ import { CoverArt, EmptyState } from '../ui/Widgets';
 const DOMAIN: number = 0x0001;
 const TAG: string = 'CommentSheet';
 
-/** 主评论正文超过这个字数就折起来（洛雪是 160，这里同量级） */
+/** 主评论正文超过这个字数就折起来（上游是 160，这里同量级） */
 const TEXT_LIMIT: number = 140;
 
 /** 评论页配色：跟着全屏播放器走（那个页面是深色的，评论盖在它上面） */
@@ -21,19 +21,19 @@ const C_PANEL_LINE: string = '#1FFFFFFF';
 /**
  * 评论页
  *
- * 对应洛雪的评论页（`src/screens/Comment/`）：头部是「「歌名」的评论」，
+ * 对应上游的评论页（`src/screens/Comment/`）：头部是「「歌名」的评论」，
  * 下面「热门 / 最新」两个页签各一条分页列表（每页 15 条，拉到底是「上拉加载更多」），
  * 页签右边一颗刷新钮。
  *
- * 两处与洛雪不同的地方，都是为了贴合本工程的界面结构：
- *   1. **不走路由**：洛雪是 push 一个独立 screen。这里播放器本身是系统的半模态
+ * 两处与上游不同的地方，都是为了贴合本工程的界面结构：
+ *   1. **不走路由**：上游是 push 一个独立 screen。这里播放器本身是系统的半模态
  *      （见 PlayerView 开头的说明），再往上压系统弹层容易打架，所以和「更多」「匹配歌词」
  *      一样自绘一层铺满的覆盖物。
- *   2. **切歌就收起**：洛雪遇到切歌是提示一句「这已经是「X」的评论啦」等着用户自己点刷新。
+ *   2. **切歌就收起**：上游遇到切歌是提示一句「这已经是「X」的评论啦」等着用户自己点刷新。
  *      这里在播放器里监听当前歌变化，直接收起这一层 —— 少一种「屏幕上显示的是谁的评论」的困惑。
  *
  * 数据来自 `core/music/PlatformComment`（内置平台接口），与音源无关：
- * 洛雪的源协议里根本没有「取评论」这个 action，所以这条路是唯一的一条。
+ * 上游的源协议里根本没有「取评论」这个 action，所以这条路是唯一的一条。
  */
 @Component
 export struct CommentSheet {
@@ -56,7 +56,7 @@ export struct CommentSheet {
   onResolveTarget: () => Promise<string> = () => Promise.resolve('');
   onClose: () => void = () => {
   };
-  /** 0 = 热门，1 = 最新（与洛雪的两个页签一致，默认停在热门） */
+  /** 0 = 热门，1 = 最新（与上游的两个页签一致，默认停在热门） */
   @State kindIndex: number = 0;
   @State comments: LxComment[] = [];
   @State loading: boolean = false;
@@ -65,7 +65,7 @@ export struct CommentSheet {
   @State page: number = 0;
   @State maxPage: number = 1;
   @State error: string = '';
-  /** 两个页签各自的总数（洛雪把总数写在页签文字里） */
+  /** 两个页签各自的总数（上游把总数写在页签文字里） */
   @State hotTotal: number = 0;
   @State newTotal: number = 0;
   /** 解析出来的平台身份（musicInfo JSON），空串 = 这首歌没有 */
@@ -196,7 +196,7 @@ export struct CommentSheet {
     void this.load(1, false);
   }
 
-  /** 还有没有下一页：按平台给的 maxPage 判断（洛雪同口径） */
+  /** 还有没有下一页：按平台给的 maxPage 判断（上游同口径） */
   private hasMore(): boolean {
     return this.comments.length > 0 && this.page < this.maxPage;
   }
@@ -212,7 +212,7 @@ export struct CommentSheet {
         .fontSize(15)
         .fontWeight(this.kindIndex === index ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(this.kindIndex === index ? '#FFFFFFFF' : C_PANEL_SUB)
-      // 选中态下面那条短线（洛雪是换文字颜色，这里多加一条线更好认）
+      // 选中态下面那条短线（上游是换文字颜色，这里多加一条线更好认）
       Column()
         .width(this.kindIndex === index ? 18 : 0)
         .height(2)

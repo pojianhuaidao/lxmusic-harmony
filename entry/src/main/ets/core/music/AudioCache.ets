@@ -9,9 +9,9 @@ const DOMAIN: number = 0x0001;
 const TAG: string = 'AudioCache';
 
 /**
- * 播放缓存（对应洛雪的「播放缓存大小」+ 资源缓存里的播放器缓存部分）
+ * 播放缓存（对应上游的「播放缓存大小」+ 资源缓存里的播放器缓存部分）
  *
- * 洛雪靠 react-native-track-player 自带的边播边缓存，用一个 maxCacheSize 限制总量。
+ * 上游靠 react-native-track-player 自带的边播边缓存，用一个 maxCacheSize 限制总量。
  * HarmonyOS 的 AVPlayer 没有把流式数据落盘的接口，所以这里做等价的事：**边播边把整首
  * 下到沙箱**，下完下次播放直接读本地文件（不联网、不看源脸色），并用一个上限做 LRU 淘汰。
  *
@@ -43,7 +43,7 @@ const DIR_NAME: string = 'lx_media_audio';
 const INDEX_FILE: string = 'index.json';
 const PART_SUFFIX: string = '.part';
 const SAVE_DELAY_MS: number = 2000;
-/** 默认上限 512MB（与洛雪一样默认开启边播边缓存） */
+/** 默认上限 512MB（与上游一样默认开启边播边缓存） */
 const DEFAULT_LIMIT_MB: number = 512;
 const AUDIO_EXTS: string[] = ['mp3', 'flac', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'ape', 'wma'];
 /**

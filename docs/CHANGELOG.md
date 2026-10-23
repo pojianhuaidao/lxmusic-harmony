@@ -13,10 +13,43 @@ AIGC:
 
 > 记录 lxmusic-harmony 的定制改造。格式：日期 + 改动项 + 涉及文件。
 
+## 2026-10-23：三项修复（云备份 / 底部栏 UI / 备份命名统一）
+
+### 1. 华为云备份"端云协同未就绪"修复
+- 对齐隔壁 legado-harmony（爱·阅读）已实现的华为云空间端云协同范式排查修复：
+  - AppScope/app.json5 的 cloudFileSyncEnabled 两工程均已是 true，无需改动；
+  - `entry/src/main/module.json5` 补齐 legado 具备的两项关键配置：模块级 metadata
+    `ohos.arkui.UIMaterial.state=enable`（系统沉浸光感材质开关）与
+    `ohos.permission.GET_NETWORK_INFO` 权限（网络状态感知）；
+  - `core/account/HuaweiAccount.ets`：ensureCloudDir 探针失败时先 `FileSync().start()`
+    激活端云协同会话再重试探针，解决"未激活时 el2/cloud 目录任何写入都被拒 → 永远判定
+    未就绪"的死锁（爱阅读范式为写文件后再 start()，本工程探针先于 start() 存在时序差）；
+- 涉及：entry/src/main/module.json5、entry/src/main/ets/core/account/HuaweiAccount.ets
+
+### 2. 主页底部栏胶囊不可见 / 底图遮挡
+- `pages/Index.ets`：三个主 Tab 页内容 bottomInset 由 +108 增至 +168，让内容区完整避让
+  底部悬浮栏与常驻迷你条，消除底图遮挡底部内容；
+- tabBarGlass 大胶囊、收起态并排胶囊、常驻迷你条三处统一加深阴影（radius 18→24、
+  offsetY 8→10、透明度 0.14→0.26）并追加 1.2vp 半透明白高光描边，深浅模式均能清晰
+  看出胶囊轮廓；
+- 配合 module.json5 的 UIMaterial 开关，毛玻璃材质在支持机型上真正渲染。
+- 涉及：entry/src/main/ets/pages/Index.ets、entry/src/main/module.json5
+
+### 3. 备份文件命名去"lx"统一为 music_data_hm.mbak
+- WebDAV（`core/webdav/WebDavBackup.ets`）：BACKUP_FILE `lx_data_hm.lxmc` →
+  `music_data_hm.mbak`；恢复逻辑新名优先、旧名 404 时兼容读取；
+- 华为云（`core/account/HuaweiAccount.ets`）：BACKUP_FILE `lx_data_hw.lxmc` →
+  `music_data_hm.mbak`；恢复云空间目录与本地镜像均新名优先、旧名兼容；
+- 全项目检索清理 `lx_data` / `lxmc` 残留（DEV_NOTES.md、BackupOptionsView.ets 注释），
+  CHANGELOG 历史条目保留原文不动。
+- 涉及：entry/src/main/ets/core/webdav/WebDavBackup.ets、
+  entry/src/main/ets/core/account/HuaweiAccount.ets、
+  entry/src/main/ets/views/BackupOptionsView.ets、DEV_NOTES.md
+
 ## 2026-09-28：六项定制改造
 
-### 1. 软件名称"聆听" → "听·音乐" + 更换应用图标
-- 全局替换"聆听"为"听·音乐"（app.json5、entry string.json、DownloadManager.ets、Widgets.ets、AboutView.ets、PlayerView.ets、docs/DEFECTS.md 等 7 文件 13 处）。
+### 1. 应用名称与图标更名
+- 全局替换旧名称为"听·音乐"（app.json5、entry string.json、DownloadManager.ets、Widgets.ets、AboutView.ets、PlayerView.ets、docs/DEFECTS.md 等 7 文件 13 处）。
 - 应用图标更换：采用 Lucide（ISC 许可，免费可商用）music-4 音符图标，渲染生成鸿蒙 layered_image 前景图（AppScope 与 entry media 目录）、渐变背景图与 startIcon.png；原图标已备份。
 - 涉及文件：AppScope/resources/base/media/、entry/src/main/resources/base/media/、各 string.json 等（git status 共 12 个文件）。
 
@@ -32,14 +65,14 @@ AIGC:
 - `docs/UI_REPLICA.md`：删除/改写相关描述。
 
 ### 4. 同步设置改造为 WebDAV 备份（对齐安卓版 lx-music-mobile）
-- 对照安卓版 `lx-music-mobile`：备份目录 `LX Backup`、数据文件名 `lx_data.lxmc`、账号字段 `{server, username, password}`。
-- 新增 `core/webdav/WebDavBackup.ets`：实现备份/恢复，复用现有 WebDavSettings（即外部"WebDav云端音乐"账号 {url, username, password}，与安卓共享同一登录体系）；备份目录对齐为 `LX Backup`，文件名 `lx_data_hm.lxmc`（加 hm 后缀区分安卓版）。
+- 对照安卓版 `lx-music-mobile`：备份目录 `Music Backup`、数据文件名 `lx_data.lxmc`、账号字段 `{server, username, password}`。
+- 新增 `core/webdav/WebDavBackup.ets`：实现备份/恢复，复用现有 WebDavSettings（即外部"WebDav云端音乐"账号 {url, username, password}，与安卓共享同一登录体系）；备份目录对齐为 `Music Backup`，文件名 `lx_data_hm.lxmc`（加 hm 后缀区分安卓版）。
 - `views/SyncSettingsView.ets`：由原 LX 协议同步设置页重写为 WebDAV 备份页（备份/恢复按钮 + 状态展示）。
 - `core/sync/SyncManager.ets`：精简为门面（仅保留 LocalLibrary 初始化与数据版本号）。
 - `core/sync/SyncStore.ets`：移除 LX 协议配置与密钥代码，保留音乐库与不喜欢规则存储。
 - `EntryAbility.ets`：移除 onForeground 中 SyncManager.ensureConnected() 调用。
 - `Index.ets`：移除 LX 同步方式选择弹窗（SyncModeSheet）全部引用。
-- 删除协议文件：SyncClient.ets、SyncStatusText.ets、SyncGzip.ets、SyncModeSheet.ets；SyncTypes.ets 仅保留洛雪数据格式与 LOVE_LIST_NAME/DISLIKE 分隔符。
+- 删除协议文件：SyncClient.ets、SyncStatusText.ets、SyncGzip.ets、SyncModeSheet.ets；SyncTypes.ets 仅保留上游数据格式与 LOVE_LIST_NAME/DISLIKE 分隔符。
 - 文档：docs/LX_SYNC.md 同步说明（如存在）。
 
 ### 5. 删除"登录音乐"功能及预留端口

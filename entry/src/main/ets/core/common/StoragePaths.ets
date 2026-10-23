@@ -5,7 +5,7 @@ import { fileIo as fs } from '@kit.CoreFileKit';
  * 应用数据根目录（沙箱迁移）
  *
  * 需求：应用数据不再落在「兼容数据」私有沙箱（context.filesDir），改放到鸿蒙系统
- * 公共 Download 目录下的 LxMusicData 文件夹 —— 用户可见、可迁移、可参与华为云备份。
+ * 公共 Download 目录下的 MusicData 文件夹 —— 用户可见、可迁移、可参与华为云备份。
  *
  * 公共目录在部分机型 / 版本上受媒体权限约束（READ_MEDIA / WRITE_MEDIA 为受限 ACL，
  * 需上架申请；本工程未申请，运行期由系统决定是否授权）。这里先尝试直接读写公共目录
@@ -21,9 +21,13 @@ import { fileIo as fs } from '@kit.CoreFileKit';
  *
  * 华为账号备份（core/account/HuaweiAccount）把备份文件写在这个根目录下的
  * huawei_backup 子目录，作为「华为远端数据」的端侧镜像，与页面层同一套数据链路。
+ *
+ * 迁移说明：应用数据目录由 LxMusicData 改为 MusicData（品牌切割）。旧版本数据位于
+ * 公共 Download/LxMusicData 下，升级后如要找回旧备份 / 旧数据，可手动将该目录内容
+ * 合并到 MusicData。
  */
 const PUBLIC_DOWNLOAD_FALLBACK: string = '/storage/Users/currentUser/Download';
-const APP_DATA_DIR: string = 'LxMusicData';
+const APP_DATA_DIR: string = 'MusicData';
 
 let cachedRoot: string = '';
 

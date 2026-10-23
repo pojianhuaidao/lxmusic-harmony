@@ -2,15 +2,15 @@ import { LxResponse, lxRequest } from '../source/LxHttp';
 import { platformName } from './MusicList';
 
 /**
- * 歌单分享链接解析（对齐洛雪各平台 songList 的 listDetailLink 规则）
+ * 歌单分享链接解析（对齐上游各平台 songList 的 listDetailLink 规则）
  *
- * 洛雪的做法是把「歌单 id」和「分享链接」当成同一个参数传给平台 SDK：各平台先拿
+ * 上游的做法是把「歌单 id」和「分享链接」当成同一个参数传给平台 SDK：各平台先拿
  * listDetailLink 正则从链接里抠出 id，抠不出来就发一次请求跟随重定向，再从最终地址
  * 里抠（wy/mg/kg/tx 都有这一步 handleParseId，见 lx-music-mobile/src/utils/musicSdk/
  * {wy,mg,kw,kg,tx}/songList.js）。这里分同样的两步：先本地正则（离线、瞬时），
  * 失败再跟随短链（163cn.tv、c.migu.cn、t1.kugou.com 这类）。
  *
- * 解析出来的东西就是洛雪列表标识 `${source}__${id}` 的两个组成部分：
+ * 解析出来的东西就是上游列表标识 `${source}__${id}` 的两个组成部分：
  * 拿到之后交给内置平台接口取歌单歌曲（core/music/MusicList 的 getPlaylistDetailAll），
  * 再落成本地歌单（core/sync/LocalLibrary 的 importPlaylist）。
  */
@@ -21,7 +21,7 @@ export interface PlaylistLink {
   source: string;
   /** 平台侧的歌单 id */
   id: string;
-  /** 洛雪的列表标识 `${source}__${id}`，导入后原样写进歌单的 sourceListId */
+  /** 上游的列表标识 `${source}__${id}`，导入后原样写进歌单的 sourceListId */
   listId: string;
   /** 命中的链接（跟随短链后是最终地址）；只给了 id 时是空串 */
   url: string;
@@ -38,7 +38,7 @@ const PLATFORM_DOMAINS: string[][] = [
 ];
 
 /**
- * 各平台从链接里抠歌单 id 的正则，照抄洛雪（顺序也照抄：先平台自己的形式，再通用的 id=）：
+ * 各平台从链接里抠歌单 id 的正则，照抄上游（顺序也照抄：先平台自己的形式，再通用的 id=）：
  *   wy  listDetailLink  /^.+(?:\?|&)id=(\d+)(?:&.*$|#.*$|$)/
  *       listDetailLink2 /^.+\/playlist\/(\d+)\/\d+\/.+$/
  *   mg  listDetailLink  /^.+\/playlist\/(\d+)(?:\?.*|&.*$|#.*$|$)/（外加 playlistId=id）
@@ -73,7 +73,7 @@ const NON_LIST_PATTERNS: RegExp[] = [
  */
 const URL_PATTERN: RegExp = /https?:\/\/[^\s"'<>，。、；：！？（）【】《》「」『』,;()\[\]{}]+/;
 
-/** 直接给「平台__id」的形式（洛雪的 listId），方便老用户按 id 导入 */
+/** 直接给「平台__id」的形式（上游的 listId），方便老用户按 id 导入 */
 const SOURCE_ID_PATTERN: RegExp = /^(kw|kg|mg|tx|wy)__([0-9A-Za-z_-]+)$/;
 
 /** 短链最多跟几跳 */
@@ -180,7 +180,7 @@ function matchUrl(url: string): PlaylistLink | null {
  * 把「平台 + 目标」收成一条解析结果
  *
  * target 要么是 id，要么是链接。深链里的 source 是权威的，所以链接域名认不出来时
- * 也按调用方给的 source 抠 id（洛雪深链里 source 与 id 是两个独立字段）。
+ * 也按调用方给的 source 抠 id（上游深链里 source 与 id 是两个独立字段）。
  */
 function linkFromTarget(source: string, target: string): PlaylistLink | null {
   if (target.length === 0) {
@@ -223,7 +223,7 @@ function parseQuery(query: string): Record<string, string> {
 }
 
 /**
- * 洛雪自己的分享链接：lxmusic://songlist/open/<source>/<id|链接>
+ * 上游自己的分享链接：lxmusic://songlist/open/<source>/<id|链接>
  *
  * 官方客户端在「分享」里给的就是这个（桌面版还有 play 动作，格式一致）。
  * 也支持带 `?data=<JSON>` 的形式，那里 source / id / url 是三个独立字段。
@@ -352,7 +352,7 @@ function htmlJumpTarget(resp: LxResponse): string {
 }
 
 /**
- * 跟随短链拿到最终地址（洛雪各平台 handleParseId 的那一步）
+ * 跟随短链拿到最终地址（上游各平台 handleParseId 的那一步）
  *
  * 这里不用系统的自动重定向：跟完了读不到最终地址（响应里的 url 只是请求地址），
  * 所以关掉自动跳转（maxRedirects: 0），自己从 Location / HTML 里取下一跳。
@@ -381,7 +381,7 @@ export async function followRedirect(url: string): Promise<string> {
 /**
  * 解析分享文本（失败时抛出可直接展示给用户的说明）
  *
- * 本地正则解析不出来、但文本里有链接时，跟一次短链再试 —— 这是洛雪遇到
+ * 本地正则解析不出来、但文本里有链接时，跟一次短链再试 —— 这是上游遇到
  * 163cn.tv / c.migu.cn / t1.kugou.com 这类分享短链时的做法。
  */
 export async function resolveShareText(text: string): Promise<PlaylistLink> {

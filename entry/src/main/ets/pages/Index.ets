@@ -12,7 +12,7 @@ import { WebDavLibrary } from '../core/webdav/WebDavLibrary';
 import { SourceEngine } from '../core/source/SourceEngine';
 import { SourceInfo, SourceLog } from '../core/source/LxTypes';
 import { OnlineRoute, LIST_PLATFORMS, platformName } from '../core/music/MusicList';
-import { C_BG, C_GLASS_SOLID, C_ICON, C_RED, C_TEXT, C_TEXT_SUB, F_SUB } from '../ui/Theme';
+import { C_BG, C_GLASS_SOLID, C_ICON, C_RED, C_TAB_UNSELECTED, C_TEXT, C_TEXT_SUB, F_SUB } from '../ui/Theme';
 import { immersiveMaterialFor, immersiveMaterialForDialog, isGlassMaterialSupported, materialFirstGlass,
   thinGlass } from '../ui/Glass';
 import { DustLayer } from '../ui/Dust';
@@ -20,7 +20,7 @@ import { SourceSandboxHost } from '../components/SourceSandboxHost';
 import { SyncManager } from '../core/sync/SyncManager';
 import { buildTitleMaterial, HDS_BAR_HEIGHT, HDS_TITLE_BAR_HEIGHT } from '../ui/Hds';
 import { K_MATERIAL_LEVEL } from '../core/settings/AppearanceSettings';
-import { contentMaxWidthFor, K_BAR_MINI_WIDTH, publishedMiniBarWidth } from '../ui/Layout';
+import { barSideMarginFor, contentMaxWidthFor, K_BAR_MINI_WIDTH, publishedMiniBarWidth } from '../ui/Layout';
 import { PageTitle, RoundIconButton, WidePane } from '../ui/Widgets';
 import { AppearanceSettingsView } from '../views/AppearanceSettingsView';
 import { AboutView } from '../views/AboutView';
@@ -110,9 +110,9 @@ const TABS: TabDef[] = [
 /**
  * 应用壳层
  *
- * 结构对应洛雪移动端：
+ * 结构对应上游移动端：
  *   底部是 HDS 的悬浮页签栏（推荐 / 歌单 / 我的 / 设置）+ 挂在它右边的迷你栏：
- *     迷你栏折叠 = 洛雪那颗悬浮专辑圆钮，展开 = 迷你播放器（封面 + 播放/下一首/播放列表）。
+ *     迷你栏折叠 = 上游那颗悬浮专辑圆钮，展开 = 迷你播放器（封面 + 播放/下一首/播放列表）。
  *     展开与折叠的互斥、让位动画都是 HDS 自己做的，点一下就切换。
  *   点迷你播放器的信息区弹出全屏播放器：它是系统的底部半模态（bindSheet），
  *     从下往上弹、顶边停在状态栏下方，下面那层页面不重建也不退出；
@@ -123,6 +123,8 @@ const TABS: TabDef[] = [
 @Component
 struct Index {
   @State activeTab: number = 0;
+  /** 底部栏是否收起成并排单行（内容下滑自动收起、点击/上滑展开，见 collapsedBottomBar） */
+  @State bottomBarCollapsed: boolean = false;
   @State playerOpen: boolean = false;
   /** 是否停留在主页根（导航栈为空）：false = 正在子页面，主页常驻胶囊条隐藏，避免与子页面自身播放条叠加 */
   @State atHomeRoot: boolean = true;
@@ -199,12 +201,17 @@ struct Index {
   private toastTimer: number = 0;
 
   aboutToAppear(): void {
-    // 恢复上次播放现场：内部读文件 / 初始化播放器，失败只记日志，不能让它把启动页带崩
-    try {
-      PlaySession.getInstance().bootstrap();
-    } catch (e) {
-      console.error('[Index] bootstrap failed: ' + JSON.stringify(e));
-    }
+    // 恢复上次播放现场：内部读 play_state.json / 初始化播放器。现场文件虽小，
+    // 但为防御性消除冷启动主线程文件 IO（AGC AppFreeze THREAD_BLOCK_6S），
+    // 一并挪到首帧后执行：界面首帧用 @StorageLink 默认值，bootstrap 完成后
+    // 自动发布队列 / 收藏 / 进度让界面刷新。失败只记日志，不能把它带崩。
+    setTimeout(() => {
+      try {
+        PlaySession.getInstance().bootstrap();
+      } catch (e) {
+        console.error('[Index] bootstrap failed: ' + JSON.stringify(e));
+      }
+    }, 0);
 
     // 华为账号：启动时恢复端侧登录态（登录后「我的」页右上角人形钮变实心）
     try {
@@ -230,15 +237,16 @@ struct Index {
     PlaySession.getInstance().setNoticeListener(this.noticeListener);
 
     this.setupWindow();
-    // 通知栏媒体卡 / 系统拉起（冷启动）：bootstrap 已恢复现场，这里消费一次
+    // 清理历史遗留的「待直达播放页」标志（上架要求：启动停留在推荐页，不再自动弹播放页）
     this.consumeOpenPlayerPending();
   }
 
   /**
-   * 通知栏媒体卡 / 系统拉起后直达播放页
+   * 清理启动残留的「待直达播放页」标志
    *
-   * 条件：确实有正在播放/暂停的歌曲（K_CURRENT_ID 非空）才弹播放器；
-   * 没有歌（普通外部拉起、无播放现场）就留在当前页。消费后立即清标志。
+   * 上架要求：任何方式打开 App 都停留在推荐页，不再自动弹播放页。
+   * 这里只消费 / 清掉历史可能残留的标志（K_OPEN_PLAYER_PENDING），不触发跳转；
+   * 需要看播放页时由用户点迷你栏 / 歌曲项进入。
    */
   private consumeOpenPlayerPending(): void {
     if (!this.openPlayerPending) {
@@ -246,9 +254,6 @@ struct Index {
     }
     AppStorage.setOrCreate(K_OPEN_PLAYER_PENDING, false);
     this.openPlayerPending = false;
-    if (this.currentId.length > 0) {
-      this.openPlayer();
-    }
   }
 
   private onOpenPlayerPendingChanged(): void {
@@ -497,10 +502,12 @@ struct Index {
    * 悬浮页签栏离屏幕底边的距离（vp）
    *
    * 照派音：压着导航条避让区。AGC 上架检验要求底部控件距底 ≥ 28vp
-   * （HarmonyOS 6.1 平板导航条），故下限从 16 提到 28；手势条更高时跟随。
+   * （HarmonyOS 6.1 平板导航条），手势条更高时跟随。
+   * 2026-10 华为音乐式悬浮改版：下限从 28 提到 40 —— 页签栏整体往上挪一点，
+   * 与屏幕底留出更明显的间距（圆角胶囊观感，见 build() 里 tabBarGlass 那条自绘底）。
    */
   private homeTabBarBottomMarginVp(): number {
-    return Math.max(28, this.bottomInset);
+    return Math.max(40, this.bottomInset);
   }
 
   /**
@@ -512,33 +519,171 @@ struct Index {
     return contentMaxWidthFor(this.windowWidth);
   }
 
-  /** 页签选中态用的强调色 / 未选中态的图标 token */
+  /** 页签选中态用的强调色 / 未选中态走页签灰 token（华为音乐式灰，深浅模式各一档） */
   private tabColor(index: number): Resource {
-    return this.activeTab === index ? C_RED : C_ICON;
+    return this.activeTab === index ? C_RED : C_TAB_UNSELECTED;
   }
 
   /**
-   * 单个页签：图标 + 文字（照派音的 `TabBarItem`）
+   * 单个页签：图标 + 文字，直接排在一整条圆角毛玻璃大胶囊（tabBarGlass）上，
+   * 不带独立小胶囊底（华为音乐式）。
    *
    * 悬浮页签栏的样式下 `tabBar` 只认官方 BottomTabBarStyle 或自定义构建器，
-   * 这里用后者，好和派音保持同一套字号与间距：图标 22、文字 11、间距 4，
-   * 选中态换实心变体 + 主题红，未选中走图标 token（深浅模式各一份）。
+   * 这里用后者。每个页签由两层组成：
+   *   - 外层 Column 撑满 HDS 均分格子（透明），保证三页签等宽分布；
+   *   - 内层内容列：图标 22 + 文字 11（间距 4），高度与页签栏齐平，无玻璃底。
+   * 选中态换实心变体 + 主题红，未选中走图标 token；玻璃观感全部交给下方
+   * tabBarGlass 那条大胶囊（thinGlass 自绘：半透明底 + blur + 圆角 + 亮边）。
    */
   @Builder
   tabBarItem(index: number) {
-    Column({ space: 4 }) {
+    Column() {
+      Column({ space: 4 }) {
+        SymbolGlyph(this.activeTab === index ? TABS[index].iconActive : TABS[index].icon)
+          .fontSize(22)
+          .fontWeight(FontWeight.Regular)
+          .height(22)
+          .fontColor([this.tabColor(index)])
+        Text(TABS[index].label)
+          .fontSize(11)
+          .fontColor(this.tabColor(index))
+      }
+      .justifyContent(FlexAlign.Center)
+      .alignItems(HorizontalAlign.Center)
+      // 华为音乐式：页签无独立胶囊底，图标+文字直接浮在 tabBarGlass 大胶囊上
+      .height(HDS_BAR_HEIGHT)
+      .padding({ left: 10, right: 10 })
+    }
+    .width('100%')
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    // 收起态：这一行整个透明掉（栏体与胶囊底也透明），页签图标由并排胶囊里的
+    // 紧凑按钮承载（见 collapsedBottomBar），避免 HDS 重新构建 tabBar 造成闪烁
+    .opacity(this.bottomBarCollapsed ? 0 : 1)
+    // 收起时比并排胶囊先淡出（160ms），避免「两套页签半透明叠加」的残影
+    .animation({ duration: 160, curve: Curve.EaseOut })
+  }
+
+  /** 收起态页签按钮：图标 + 小字，点按即展开两行并切页签 */
+  @Builder
+  collapsedTabButton(index: number) {
+    Column({ space: 2 }) {
       SymbolGlyph(this.activeTab === index ? TABS[index].iconActive : TABS[index].icon)
-        .fontSize(22)
+        .fontSize(20)
         .fontWeight(FontWeight.Regular)
-        .height(22)
+        .height(20)
         .fontColor([this.tabColor(index)])
       Text(TABS[index].label)
-        .fontSize(11)
+        .fontSize(9)
         .fontColor(this.tabColor(index))
     }
+    .width(52)
+    .height('100%')
     .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .borderRadius(16)
+    .onClick(() => {
+      // 点回缩按钮：展开成两行（播放条一行 + 页签一行）并切换页签
+      this.bottomBarCollapsed = false;
+      this.tabsController.changeIndex(index);
+    })
+    .accessibilityText(`${TABS[index].label}页签，点按展开`)
+    .accessibilityLevel('yes')
+  }
+
+  /**
+   * 收起态底部并排胶囊：迷你播放条 + 三个紧凑页签按钮
+   *
+   * 内容下拉回缩时（bottomBarCollapsed=true）HdsTabs 栏体、自绘玻璃胶囊与常驻迷你条
+   * 一起透明并让位，由这一条替代：左侧是精简播放条（封面 + 歌名 + 播放/暂停，
+   * compact 形态），右侧并排三个紧凑页签按钮，整体一个玻璃胶囊。点击任一页签按钮
+   * 展开成两行并切页签。
+   */
+  @Builder
+  collapsedBottomBar() {
+    Row() {
+      MiniBarView({
+        windowWidth: this.windowWidth,
+        forceExpanded: true,
+        compact: true,
+        onOpenPlayer: () => {
+          this.openPlayer();
+        },
+        onOpenQueue: () => {
+          this.openQueue();
+        },
+      })
+      .layoutWeight(1)
+      .height('100%')
+
+      Divider()
+        .vertical(true)
+        .strokeWidth(0.6)
+        .color(C_TAB_UNSELECTED)
+        .margin({ top: 10, bottom: 10 })
+
+      this.collapsedTabButton(0)
+      this.collapsedTabButton(1)
+      this.collapsedTabButton(2)
+    }
+    .width('100%')
+    .height(HDS_BAR_HEIGHT)
+    .borderRadius(HDS_BAR_HEIGHT / 2)
+    // 悬浮胶囊可见性：与常驻迷你条/页签栏同款强阴影 + 高光边，收起态同样轮廓清晰
+    .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
+    .border({ width: 1.2, color: '#66FFFFFF' })
+    .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+    // 胶囊左右各留 6vp：与页签胶囊同一套留边观感，两端内容不贴圆角
+    .padding({ left: 6, right: 6 })
+    .align(Alignment.Bottom)
+    .margin({
+      left: barSideMarginFor(this.windowWidth),
+      right: barSideMarginFor(this.windowWidth),
+      bottom: this.homeTabBarBottomMarginVp(),
+    })
+    // 收起态显示：展开时透明并下移让位（与常驻迷你条的位移动画互逆）
+    .opacity(this.bottomBarCollapsed ? 1 : 0)
+    .translate({ y: this.bottomBarCollapsed ? 0 : HDS_BAR_HEIGHT + 10 })
+    // 展开态禁交互：透明层不拦截常驻迷你条的点击
+    .enabled(this.bottomBarCollapsed)
+    // 收起时等页签栏先淡出让位（delay 80ms）再淡入，展开时立即淡出让位，
+    // 避免两套内容交叉半透明的「闪 / 残影」
+    .animation({ duration: 240, curve: Curve.EaseOut, delay: this.bottomBarCollapsed ? 80 : 0 })
+  }
+
+  /**
+   * 华为音乐式悬浮页签栏的圆角玻璃底
+   *
+   * HdsTabs 的 `barFloatingStyle` 是 API 26.0.0 新增，HarmonyOS 6.1(23) 设备上不存在，
+   * 调用即 JsCrash，只能降级默认栏样式（一条直角灰白带）。这里在壳层最底部垫一条
+   * 圆角胶囊玻璃底：HdsTabs 栏体设成透明（见 build 里 .barBackgroundColor），页签的
+   * 图标/文字仍由 HdsTabs 渲染、浮在这条胶囊上；左右按窗口宽度留边（barSideMarginFor），
+   * 底部与 HdsTabs 同一套底距口径（≥40vp），整体就是华为音乐那种「圆角、悬浮、离底」。
+   * 子页面压栈时 HdsNavigation 覆盖其上，本层不会漏出。
+   */
+  @Builder
+  tabBarGlass() {
+    Column() {
+      Row()
+        .width('100%')
+        .height(HDS_BAR_HEIGHT)
+        .borderRadius(HDS_BAR_HEIGHT / 2)
+        // 悬浮胶囊可见性：浅色内容底上 82% 白底 + 纯白描边几乎与背景融为一体
+        // （用户反馈「看不出胶囊」），加深阴影浮起感、追加半透明白高光边，
+        // 深浅模式都能清晰看出胶囊轮廓
+        .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
+        .border({ width: 1.2, color: '#66FFFFFF' })
+        .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+    }
+    .width('100%')
+    .padding({
+      left: barSideMarginFor(this.windowWidth),
+      right: barSideMarginFor(this.windowWidth),
+      bottom: this.homeTabBarBottomMarginVp(),
+    })
+    .align(Alignment.Bottom)
+    // 收起态：胶囊底透明（栏体与页签图标也透明，见 tabBarItem）
+    .opacity(this.bottomBarCollapsed ? 0 : 1)
+    // 收起时先于并排胶囊淡出（160ms），见 tabBarItem 的说明
+    .animation({ duration: 160, curve: Curve.EaseOut })
   }
 
   /**
@@ -781,7 +926,7 @@ struct Index {
    * 点歌单 -> 打开歌单详情页
    *
    * 之前这里是「把歌单灌进播放队列 + 弹播放列表」，跳过了「看歌单」这一步：
-   * 歌单是歌单，播放列表（队列）是播放列表，洛雪点歌单进的也是歌单详情。
+   * 歌单是歌单，播放列表（队列）是播放列表，上游点歌单进的也是歌单详情。
    * 详情页里再「播放全部」或者点某一首，才动播放队列。
    */
   private openPlaylist(playlist: PlaylistSummary): void {
@@ -1290,6 +1435,10 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
+      // ---------------------------------------------------- 华为音乐式悬浮页签栏（圆角玻璃底）
+      // 垫在 HdsNavigation 之下：栏体透明后页签图标/文字浮在这条胶囊上，见 tabBarGlass 说明
+      this.tabBarGlass()
+
       // ---------------------------------------------------- HDS 导航（主页签 + 子页面）
       HdsNavigation(this.pathStack) {
         // 壳层页签栏整体抬高（仅作用于 HdsTabs 这一棵子树，不影响路由压栈的子页面）：
@@ -1301,12 +1450,15 @@ struct Index {
             WidePane({ maxWidth: this.contentMaxWidth() }) {
               RecommendView({
                 topInset: this.topInset + HDS_TITLE_BAR_HEIGHT,
-                bottomInset: this.bottomInset + 96,
+                bottomInset: this.bottomInset + 168,
                 onOpenSearch: () => {
                   this.go(PAGE_SEARCH);
                 },
                 onOpenOnline: (route: OnlineRoute) => {
                   this.openOnline(route);
+                },
+                onFoldChange: (folded: boolean) => {
+                  this.bottomBarCollapsed = folded;
                 },
               })
             }
@@ -1317,12 +1469,15 @@ struct Index {
             WidePane({ maxWidth: this.contentMaxWidth() }) {
               SongListView({
                 topInset: this.topInset + HDS_TITLE_BAR_HEIGHT,
-                bottomInset: this.bottomInset + 96,
+                bottomInset: this.bottomInset + 168,
                 onOpenPlaylist: (playlist: PlaylistSummary) => {
                   this.openPlaylist(playlist);
                 },
                 onOpenOnline: (route: OnlineRoute) => {
                   this.openOnline(route);
+                },
+                onFoldChange: (folded: boolean) => {
+                  this.bottomBarCollapsed = folded;
                 },
               })
             }
@@ -1333,12 +1488,15 @@ struct Index {
             WidePane({ maxWidth: this.contentMaxWidth() }) {
               MineView({
                 topInset: this.topInset + HDS_TITLE_BAR_HEIGHT,
-                bottomInset: this.bottomInset + 96,
+                bottomInset: this.bottomInset + 168,
                 // 「我的」页里那一排快捷入口（本地音乐 / 最近播放 / 下载管理 / 云端音乐）、
                 // 那张设置卡的各项（音源 / 同步 / 播放 / 缓存 / 下载 / 云音乐 / 显示 / 关于），
                 // 以及云端音乐的「去设置」都走壳层路由
                 onNavigate: (action: string) => {
                   this.onSettingAction(action);
+                },
+                onFoldChange: (folded: boolean) => {
+                  this.bottomBarCollapsed = folded;
                 },
               })
             }
@@ -1357,6 +1515,9 @@ struct Index {
         // 已移除 .barFloatingStyle()：API 26.0.0 新增，HarmonyOS 6.1(23) 设备不存在该 API，
         // 调用即抛 undefined is not callable（JsCrash，与 OnlineListView/PanePage/PlaylistDetailView 同根因），
         // 降级默认栏样式，悬浮迷你栏配置一并移除
+        // 华为音乐式悬浮改版：栏体不要自己的灰白底（观感全交给下方 tabBarGlass 那条圆角
+        // 玻璃胶囊），页签图标/文字仍由 HdsTabs 渲染，与胶囊重合（同一套底距/留边口径）
+        .barBackgroundColor(Color.Transparent)
         .onChange((index: number) => {
           this.activeTab = index;
         })
@@ -1444,11 +1605,30 @@ struct Index {
         .width(this.floatingBarSmallWidthVp())
         .height(HDS_BAR_HEIGHT)
         .borderRadius(HDS_BAR_HEIGHT / 2)
-        .clip(true)
+        // 华为音乐式悬浮卡片：轻投影提升浮起感（去掉 clip，阴影才不被圆角裁剪）
+        // 悬浮胶囊可见性：浅色内容底上 82% 白底 + 纯白描边几乎与背景融为一体
+        // （用户反馈「看不出胶囊」），加深阴影浮起感、追加半透明白高光边，
+        // 深浅模式都能清晰看出胶囊轮廓
+        .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
+        .border({ width: 1.2, color: '#66FFFFFF' })
         // 内容区自绘玻璃（内容区不构成系统材质，见 ui/Glass.ets 说明）
         .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
         .align(Alignment.Bottom)
         .margin({ bottom: this.homeTabBarBottomMarginVp() + HDS_BAR_HEIGHT + 10 })
+        // 收起态：透明并下移让位，底部只剩并排胶囊一行（见 collapsedBottomBar）
+        .opacity(this.bottomBarCollapsed ? 0 : 1)
+        .translate({ y: this.bottomBarCollapsed ? HDS_BAR_HEIGHT + 10 : 0 })
+        // 收起态禁交互：透明层不拦截点击（点击归并排胶囊）
+        .enabled(!this.bottomBarCollapsed)
+        // 收起时先于并排胶囊淡出（160ms），见 tabBarItem 的说明
+        .animation({ duration: 160, curve: Curve.EaseOut })
+      }
+
+      // ---------------------------------------------------- 收起态底部并排胶囊（播放条 + 紧凑页签）
+      // 与常驻迷你条同一显示条件：只在「主页根 + 播放器/队列未打开」时出现，
+      // 展开时透明下移、收起时上移显示（与上面常驻条互逆）
+      if (this.atHomeRoot && !this.playerOpen && !this.queueOpen) {
+        this.collapsedBottomBar()
       }
 
       // ---------------------------------------------------- 状态提示

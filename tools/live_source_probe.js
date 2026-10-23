@@ -1,7 +1,7 @@
 'use strict'
 /**
  * 真实音源「活体」联调：把 rawfile 里的 lx_utils.js / lx_preload.js 原样装进 Node vm，
- * 再把一个真实音源脚本跑起来，宿主侧用真实网络（node fetch，自动跟随重定向，与洛雪的
+ * 再把一个真实音源脚本跑起来，宿主侧用真实网络（node fetch，自动跟随重定向，与上游的
  * global.fetch 语义一致）代理 lx.request，最后调用 musicUrl 看能否解析出播放链接。
  *
  * 这与设备上的链路一一对应：

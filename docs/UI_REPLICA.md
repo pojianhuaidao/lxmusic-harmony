@@ -1,6 +1,6 @@
-# 洛雪移动端 UI 复刻（HarmonyOS）
+# 上游移动端 UI 复刻（HarmonyOS）
 
-目标：界面与洛雪音乐移动端一致。播放链路复用了原有的
+目标：界面与上游项目移动端一致。播放链路复用了原有的
 「内置搜索 → 自定义音源解析播放链接 → AVPlayer」；界面上的数据一律来自真实来源
 （内置平台接口 / 本地音乐库 / 同步 / 本地与云端导入），**没有任何内置演示数据**。
 
@@ -324,7 +324,7 @@ token 的取值分两份、同名同义，放在
 
 | | 收藏的歌 | 收藏歌单 |
 | --- | --- | --- |
-| 是什么 | 洛雪的 loveList，一张内置歌单（「我的收藏」） | **线上**歌单（推荐页里别人的那张） |
+| 是什么 | 上游的 loveList，一张内置歌单（「我的收藏」） | **线上**歌单（推荐页里别人的那张） |
 | 入口 | 任一行上的爱心；多选里的「收藏」 | 点开一张在线歌单，顶部那颗「收藏歌单」钮（`views/OnlineListView.ets`） |
 | 在哪看 | 「我的」页快捷入口「收藏」 | 「我的」页歌单卡里「自建歌单 \| 收藏歌单」**右边那一段** |
 | 参与同步 | 是（整份 love 列表覆盖上行） | **否**，纯本地 |
@@ -342,9 +342,9 @@ token 的取值分两份、同名同义，放在
 
 实现：`core/sync/CollectedPlaylists.ets` —— 每条记 `{source, id, name, cover, meta}`
 （列表要显示的那几项一起快照，打开「我的」时不必为了显示这一行再请求接口；主键是
-`collectedKeyOf` = `${平台}__${歌单id}`，与洛雪那套 `sourceListId` 同一个口径）。
+`collectedKeyOf` = `${平台}__${歌单id}`，与上游那套 `sourceListId` 同一个口径）。
 一份 JSON 落应用沙箱（`collected_playlists.json`），改完发布一个 AppStorage 版本号
-（`K_COLLECTED_VERSION`）给界面订阅。**为什么不走同步**：洛雪的 `ListData` 只有
+（`K_COLLECTED_VERSION`）给界面订阅。**为什么不走同步**：上游的 `ListData` 只有
 defaultList / loveList / userList 三段，协议里没有歌单这一级的收藏。
 
 榜单（kind='board'）没有这颗钮：榜单不是歌单，bangid 与歌单 id 不是一回事。
@@ -411,7 +411,7 @@ ListItem() { ... }
 
 ### 底部：HdsTabs 悬浮页签 + MiniBar
 
-洛雪底部那套「左边点出页签栏、右边点唱片出播放器」的交互，正好就是 HDS 悬浮页签
+上游底部那套「左边点出页签栏、右边点唱片出播放器」的交互，正好就是 HDS 悬浮页签
 （6.1.0(23) 起支持）的设计：悬浮页签栏右边跟一条**迷你栏**，两者高度相等，
 一个展开另一个就收起来，点击由 HDS 自己处理（回调里 `mode == USER_CLICK`）。
 
@@ -689,7 +689,7 @@ HdsListItemCard({
   解析好一批就把 `K_COVER_VERSION` +1，订阅它的列表重画一次，封面陆续出现。
   播放页与迷你栏用 `K_CURRENT_COVER`，当前这首歌解析好就回填。
 - **歌词**：**内置平台歌词是主力**（kw/kg/tx/mg，`core/music/PlatformLyric.ets`）——
-  平台源的 action 白名单本来就只有 `musicUrl`，洛雪也是用内置 SDK 取词的，所以不该
+  平台源的 action 白名单本来就只有 `musicUrl`，上游也是用内置 SDK 取词的，所以不该
   指望源。kw 的接口是 zlib 流（自己实现了 inflate）→ base64 → XOR `yeelion`；
   kg 是 `download?fmt=lrc` 的 base64 明文；tx 是 `fcg_query_lyric_new?nobase64=1`
   的明文 LRC；mg 是 `resourceinfo` 拿 `lrcUrl` 再取明文。源若声明了 `lyric` 则优先用源的（本工程有意放宽了 preload 的

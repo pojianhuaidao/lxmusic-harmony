@@ -6,7 +6,7 @@
  * @homepage https://example.com/lx-demo
  */
 
-// 源规则：洛雪自定义音源通过 lx.on('request', handler) 注册处理器。
+// 源规则：上游自定义音源通过 lx.on('request', handler) 注册处理器。
 // handler 收到 { source, action, info }，需要返回 Promise：
 //   action === 'musicUrl' -> resolve 一个 http(s) 播放链接字符串
 //   action === 'lyric'    -> resolve { lyric, tlyric? } 对象

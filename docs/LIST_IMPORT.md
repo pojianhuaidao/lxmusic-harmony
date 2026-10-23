@@ -1,7 +1,7 @@
 # 歌单导入（第三方歌单分享链接）
 
 把网易云 / QQ / 酷狗 / 酷我 / 咪咕的**歌单分享链接**粘贴进来，解析出平台与歌单 id，
-拉全量歌曲后落成本地歌单（与洛雪桌面版「导入歌单」是同一件事）。
+拉全量歌曲后落成本地歌单（与上游桌面版「导入歌单」是同一件事）。
 
 ## 入口
 
@@ -26,11 +26,11 @@
 
 ## 链接规则
 
-正则照抄洛雪各平台 `songList.js` 的 `listDetailLink`（见
+正则照抄上游各平台 `songList.js` 的 `listDetailLink`（见
 `lx-music-mobile/src/utils/musicSdk/{wy,mg,kw,kg,tx}/songList.js`），
 不是自己编的——这样「哪些链接算歌单链接」与官方客户端一致。
 
-| 平台 | 认得的链接 | 对应洛雪正则 |
+| 平台 | 认得的链接 | 对应上游正则 |
 | --- | --- | --- |
 | 网易 wy | `music.163.com/#/playlist?id=<id>`、`/playlist?id=<id>&userid=`、`/playlist/<id>/<x>/` | `listDetailLink` + `listDetailLink2` |
 | QQ tx | `y.qq.com/n/ryqq/playlist/<id>`、`i.y.qq.com/.../taoge.html?id=<id>` | `/\/playlist\/(\d+)/` + `/id=(\d+)/` |
@@ -40,9 +40,9 @@
 
 另外支持两类「非链接」输入：
 
-- 洛雪自己的分享链接：`lxmusic://songlist/open/<source>/<id|链接>`（`play` 动作参数一样），
+- 上游自己的分享链接：`lxmusic://songlist/open/<source>/<id|链接>`（`play` 动作参数一样），
   以及带 `?data=<JSON>` 的形式（`source` / `id` / `url` 是三个独立字段）；
-- 直接给洛雪的列表标识 `${source}__${id}`，例如 `wy__2892110024`。
+- 直接给上游的列表标识 `${source}__${id}`，例如 `wy__2892110024`。
 
 分享文本里有中文标点时按标点截断（`分享歌单《x》https://...，快来听`）；
 但 `?` `&` `!` 是 URL 自己的字符，不能当标点截——踩过这个坑：截掉查询串之后
@@ -51,7 +51,7 @@
 ### 短链
 
 `163cn.tv` / `c.migu.cn` / `t1.kugou.com` 这类短链本地正则抠不出 id，此时跟随一次
-重定向再看最终地址（洛雪各平台的 `handleParseId`）。系统默认的自动重定向跟完读不到
+重定向再看最终地址（上游各平台的 `handleParseId`）。系统默认的自动重定向跟完读不到
 最终地址（响应里的 `url` 只是请求地址），所以请求时 `maxRedirects: 0`，自己读 3xx 的
 `Location`；有些短链不做 3xx 而是在 HTML 里跳（meta refresh / `location.replace`），
 这种情况再从响应体里捞一次。
@@ -65,18 +65,18 @@
 
 ## 导入语义
 
-对齐洛雪 `views/songList/Detail/action.ts` 的 `addSongListDetail`：
+对齐上游 `views/songList/Detail/action.ts` 的 `addSongListDetail`：
 
 - 本地歌单 id = `<平台>_<md5(平台__歌单id)>`。同一个线上歌单反复导入都是同一个本地歌单，
   不会堆出一串同名列表；
 - 一并写 `source` 与 `sourceListId`（`sourceListId` = `${source}__${id}`，与解析出的
-  `listId` 一致）。这两个字段在洛雪同步协议里本来就有，服务端与官方客户端都认；
+  `listId` 一致）。这两个字段在上游同步协议里本来就有，服务端与官方客户端都认；
 - 再次导入同一个线上歌单 = 原地更新（改名 + 用线上最新歌曲覆盖），并上行
   `list_update` + `list_music_overwrite`；
-- 歌曲去重按洛雪的 id 规则（`core/music/MusicId.ets`），与同步结构一致，
+- 歌曲去重按上游的 id 规则（`core/music/MusicId.ets`），与同步结构一致，
   所以导入的歌能正常同步、收藏红心也能对上。
 
-> 洛雪原版这里有个小毛病：判断重复时拿 `${source}__${id}` 去比 `sourceListId`，
+> 上游原版这里有个小毛病：判断重复时拿 `${source}__${id}` 去比 `sourceListId`，
 > 但存进去的是裸 `id`，所以那个判断永远不成立（重复导入会新建列表）。
 > 本实现按「存什么就比什么」来，两边都用 `${source}__${id}`。
 

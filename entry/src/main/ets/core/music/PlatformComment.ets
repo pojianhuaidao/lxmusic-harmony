@@ -5,16 +5,16 @@ import { md5Hex } from './LxCrypto';
 /**
  * 内置平台评论
  *
- * 为什么和歌词一样不能靠自定义源：洛雪的源协议里平台源的 action 白名单只有
+ * 为什么和歌词一样不能靠自定义源：上游的源协议里平台源的 action 白名单只有
  * `musicUrl`（见 lx_preload.js 的 supportActions），「给 musicInfo 拿评论」不属于源规则。
- * 洛雪自己走内置平台 SDK（`src/utils/musicSdk/{kw,kg,tx,mg,wy}/comment.js` 的
+ * 上游自己走内置平台 SDK（`src/utils/musicSdk/{kw,kg,tx,mg,wy}/comment.js` 的
  * `musicSdk[source].comment.getComment/getHotComment`），这里把同一批接口移植到 ArkTS。
  *
  * 与歌词（`PlatformLyric.ets`）的分工完全对称：
  *   - 取词：源自带的 `lyric` 优先，内置平台歌词兜底；
  *   - 取评论：源协议里根本没有评论这个 action，所以只有内置这一条路。
  *
- * 各平台的分页方式差别很大，移植时都照着洛雪原样保留：
+ * 各平台的分页方式差别很大，移植时都照着上游原样保留：
  *   - 酷我：`start = limit * (page - 1)`，最普通；
  *   - 酷狗：同上，外加一个把参数排序后拼 key 的 md5 签名；
  *   - QQ ：最新评论 `pagenum = page - 1`，热门评论走 musicu 的 GetHotCommentList；
@@ -52,10 +52,10 @@ export interface CommentPage {
   maxPage: number;
 }
 
-/** 「热门」还是「最新」（对应洛雪评论页的两个页签） */
+/** 「热门」还是「最新」（对应上游评论页的两个页签） */
 export type CommentKind = 'hot' | 'new';
 
-/** 一页拉多少条（与洛雪评论页一致：两个页签都是 15） */
+/** 一页拉多少条（与上游评论页一致：两个页签都是 15） */
 export const COMMENT_PAGE_SIZE: number = 15;
 
 const COMMENT_SOURCES: string[] = ['kw', 'kg', 'mg', 'tx', 'wy'];
@@ -106,14 +106,14 @@ function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
 }
 
-/** `YYYY-MM-DD`（洛雪的 dateFormat(x, 'Y-M-D')） */
+/** `YYYY-MM-DD`（上游的 dateFormat(x, 'Y-M-D')） */
 function dateOnly(ms: number): string {
   const date = new Date(ms);
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
 /**
- * 相对时间（照抄洛雪 `date_format_second/minute/hour` 的档位与文案）
+ * 相对时间（照抄上游 `date_format_second/minute/hour` 的档位与文案）
  *
  * 一分钟内「N 秒前」、一小时内「N 分钟前」、一天内「N 小时前」，再往前只给日期。
  * 时间戳异常（0 / 未来）返回空串，界面就不显示这一块。
@@ -156,7 +156,7 @@ function parseDateTime(text: string): number {
 /** 按平台给的秒级时间戳转毫秒（QQ 的 time 字段是秒） */
 function secondsToMs(value: Object | undefined): number {
   const text: string = asString(value);
-  // 洛雪只认 10 位以上的时间戳（秒）；短于此的当没有时间
+  // 上游只认 10 位以上的时间戳（秒）；短于此的当没有时间
   if (text.length < 10) {
     return 0;
   }
@@ -238,7 +238,7 @@ async function kwComments(songmid: string, kind: CommentKind, page: number, limi
 
 /**
  * 酷狗评论签名：把查询串按 `&` 拆开、**排序**后拼起来，前后各裹一个固定 key 再 md5
- * （照抄洛雪 `kg/util.js` 的 `signatureParams`，key 是 android 那一个）
+ * （照抄上游 `kg/util.js` 的 `signatureParams`，key 是 android 那一个）
  */
 export function kgSignature(params: string): string {
   const parts: string[] = params.split('&');
@@ -246,7 +246,7 @@ export function kgSignature(params: string): string {
   return md5Hex(`OIlwieks28dk2k092lksi2UIkp${parts.join('')}OIlwieks28dk2k092lksi2UIkp`);
 }
 
-/** 酷狗把「回复某人」写成 `[at=123]`，要换成 `@名字 `（照抄洛雪 kg/comment.js 的 replaceAt） */
+/** 酷狗把「回复某人」写成 `[at=123]`，要换成 `@名字 `（照抄上游 kg/comment.js 的 replaceAt） */
 function replaceAt(raw: string, atList: Object[]): string {
   let out: string = raw;
   for (const atRaw of atList) {
@@ -282,7 +282,7 @@ export function parseKgComments(rawList: Object[]): LxComment[] {
       }
     }
 
-    // pcontent 是「这条其实是回复某条评论」时被引用的原文：洛雪把它当成主楼、
+    // pcontent 是「这条其实是回复某条评论」时被引用的原文：上游把它当成主楼、
     // 真正的回复放 reply 里（与 QQ / 网易同一套处理）
     const parent: string = asString(item['pcontent']);
     if (parent.length === 0) {
@@ -304,7 +304,7 @@ async function kgComments(info: LxMusicInfo, kind: CommentKind, page: number, li
     throw new Error('这首歌缺少酷狗 hash，拿不到评论');
   }
   const rank: string = kind === 'hot' ? 'topliked' : 'newest';
-  // 参数顺序与洛雪一致（签名算的是排序后的串，顺序其实不影响结果，但保持一致便于对照）
+  // 参数顺序与上游一致（签名算的是排序后的串，顺序其实不影响结果，但保持一致便于对照）
   const params: string = 'dfid=0&mid=16249512204336365674023395779019' +
     `&clienttime=${Date.now()}&uuid=0&extdata=${hash}` +
     '&appid=1005&code=fc4be23b4e972707f36b8a828a93ba8a' +
@@ -394,7 +394,7 @@ export function parseMgComments(rawList: Object[]): LxComment[] {
   return out;
 }
 
-/** 咪咕评论用的 resourceId：搜索结果的 songmid 就是 songId（洛雪 mg/songId.js 同口径） */
+/** 咪咕评论用的 resourceId：搜索结果的 songmid 就是 songId（上游 mg/songId.js 同口径） */
 function mgResourceId(info: LxMusicInfo): string {
   if (info.songId !== undefined && info.songId.length > 0) {
     return info.songId;
@@ -420,7 +420,7 @@ async function mgComments(info: LxMusicInfo, kind: CommentKind, page: number, li
     }
     const cursor: string = mgCursorOf(resourceId, page);
     if (page > 1 && cursor.length === 0) {
-      // 没有上一页的游标就翻不动了（洛雪在这里直接报错，我们同样如实抛）
+      // 没有上一页的游标就翻不动了（上游在这里直接报错，我们同样如实抛）
       throw new Error('咪咕评论需要按顺序翻页，请先加载上一页');
     }
     url = `${base}&queryType=1&commentId=${encodeURIComponent(cursor)}`;
@@ -456,12 +456,12 @@ const TX_HEADERS: Record<string, string> = {
   'origin': 'https://y.qq.com',
 };
 
-/** QQ 老 fcg 接口（最新评论）与补 songId 用的老式 UA，照抄洛雪 */
+/** QQ 老 fcg 接口（最新评论）与补 songId 用的老式 UA，照抄上游 */
 const TX_FCG_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
 };
 
-/** QQ 评论里的表情码（`[em]e400846[/em]`），照抄洛雪 tx/comment.js 的 emojis 表 */
+/** QQ 评论里的表情码（`[em]e400846[/em]`），照抄上游 tx/comment.js 的 emojis 表 */
 const TX_EMOJIS: Record<string, string> = {
   'e400846': '😘', 'e400874': '😴', 'e400825': '😃', 'e400847': '😙', 'e400835': '😍',
   'e400873': '😳', 'e400836': '😎', 'e400867': '😭', 'e400832': '😊', 'e400837': '😏',
@@ -490,7 +490,7 @@ function txText(raw: string): string {
   return replaced.split('\\n').join('\n');
 }
 
-/** QQ 的昵称前面带一个不可见的控制字符（洛雪统一 substring(1) 去掉） */
+/** QQ 的昵称前面带一个不可见的控制字符（上游统一 substring(1) 去掉） */
 function txNick(raw: string): string {
   return raw.length > 1 ? raw.substring(1) : '';
 }
@@ -507,7 +507,7 @@ export function parseTxComments(rawList: Object[]): LxComment[] {
     comment.avatar = asString(item['avatarurl']);
     comment.userId = asString(item['encrypt_rootcommentuin']);
     comment.likedCount = likedCountOf(item['praisenum']);
-    // 时间只跟着「本条」走：被引用进来的原文不报时间（洛雪同款判断）
+    // 时间只跟着「本条」走：被引用进来的原文不报时间（上游同款判断）
     if (isRoot) {
       comment.timeStr = relativeTime(secondsToMs(item['time']));
     }
@@ -639,7 +639,7 @@ async function txSongId(info: LxMusicInfo): Promise<string> {
     throw new Error('这首歌缺少 QQ 歌曲 id，拿不到评论');
   }
   // 评论接口要的是数字 songId，而条目里可能只存了 songmid（比如歌单导入那条路）。
-  // 用洛雪 tx/musicInfo.js 的 get_song_detail_yqq 换一次，结果按 songmid 缓存。
+  // 用上游 tx/musicInfo.js 的 get_song_detail_yqq 换一次，结果按 songmid 缓存。
   const payload: TxSongDetailPayload = {
     comm: { ct: '19', cv: '1859', uin: '0' },
     req: {
@@ -721,7 +721,7 @@ const WY_HEADERS: Record<string, string> = {
   'Referer': 'https://music.163.com/',
 };
 
-/** 网易把表情写成 `[大笑]` 这种标签，照抄洛雪 wy/comment.js 的表换成 emoji */
+/** 网易把表情写成 `[大笑]` 这种标签，照抄上游 wy/comment.js 的表换成 emoji */
 const WY_EMOJIS: string[][] = [
   ['大笑', '😃'], ['可爱', '😊'], ['憨笑', '☺️'], ['色', '😍'], ['亲亲', '😙'],
   ['惊恐', '😱'], ['流泪', '😭'], ['亲', '😚'], ['呆', '😳'], ['哀伤', '😔'],
@@ -763,7 +763,7 @@ function wyOne(raw: Object, withTime: boolean): LxComment {
 
 /**
  * 网易：「这条其实是回复别人」时，`beReplied[0]` 装的是被引用的原文。
- * 洛雪把它翻成「主楼 = 原文，reply = 这条回复」，这里同一套处理。
+ * 上游把它翻成「主楼 = 原文，reply = 这条回复」，这里同一套处理。
  */
 export function parseWyComments(rawList: Object[]): LxComment[] {
   const out: LxComment[] = [];
@@ -786,7 +786,7 @@ export function parseWyComments(rawList: Object[]): LxComment[] {
 /**
  * 网易：公开的 `/api/v1/resource/comments/R_SO_4_{id}`（无需登录、无需 weapi 加密）
  *
- * 洛雪走的是 `weapi/comment/resource/comments/get`（要 weapi 的 AES+RSA），
+ * 上游走的是 `weapi/comment/resource/comments/get`（要 weapi 的 AES+RSA），
  * 而本工程已经因为 wy 的 eapi 链路整体不通（见 docs/DEFECTS.md D-001）改用公开接口取歌词
  * （`PlatformLyric.wyLyric` 的 `/api/song/lyric`），评论沿用同一套路子 —— 同样打
  * music.163.com 的公开 `/api/` 面，只是路径是评论那两个。
@@ -846,7 +846,7 @@ export async function fetchComments(info: LxMusicInfo, kind: CommentKind, page: 
   return await wyComments(info.songmid, kind, page, limit);
 }
 
-/** 同一首歌同一页去重（平台会在翻页边界重复返回，洛雪的 filterList 就是干这个的） */
+/** 同一首歌同一页去重（平台会在翻页边界重复返回，上游的 filterList 就是干这个的） */
 export function dedupeComments(list: LxComment[]): LxComment[] {
   const seen: string[] = [];
   const out: LxComment[] = [];

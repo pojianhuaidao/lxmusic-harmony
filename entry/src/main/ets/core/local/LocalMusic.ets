@@ -51,7 +51,7 @@ export const K_LOCAL_PROGRESS: string = 'local_progress';
  * 认不出这个字段（`implements SongSideTable` 就会报「缺少 source」）。
  */
 export const LOCAL_SOURCE: string = 'local';
-/** 本地歌的条目 id 前缀（洛雪也用 'local' 表示本地歌曲） */
+/** 本地歌的条目 id 前缀（上游也用 'local' 表示本地歌曲） */
 export const LOCAL_ID_PREFIX: string = 'local_';
 
 /** 一条本地歌曲（落盘索引里的一行） */
@@ -175,7 +175,12 @@ export class LocalMusic implements SongSideTable {
       this.ready = false;
       return;
     }
-    this.load();
+    // 本地音乐库索引 JSON（歌曲 / 歌单侧表）可能很大，同步 readTextSync + JSON.parse
+    // 会把冷启动主线程卡住（AGC AppFreeze THREAD_BLOCK_6S）；挪到首帧后异步加载，
+    // 本地音乐页 / 歌单侧表在进入页面时再读（那时早已就绪），无需界面改动。
+    setTimeout(() => {
+      this.load();
+    }, 0);
   }
 
   isReady(): boolean {

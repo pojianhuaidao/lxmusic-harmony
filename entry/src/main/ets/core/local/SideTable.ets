@@ -3,7 +3,7 @@ import { SongItem } from '../player/PlaySession';
 /**
  * 歌单 / 收藏的**非同步侧表**
  *
- * 背景见 docs/LOCAL_MUSIC.md 第 7 节：参与洛雪同步的那份数据（LxListData）要按
+ * 背景见 docs/LOCAL_MUSIC.md 第 7 节：参与上游同步的那份数据（LxListData）要按
  * listData() 的 JSON 算 md5 与服务端比对，往里塞任何字段都会改掉 md5；而
  * `musicsOf()` 又会把 `isSyncable() === false` 的条目直接丢掉。所以「不属于在线歌
  * 的那部分歌单成员」只能另存一份 —— 这就是侧表。

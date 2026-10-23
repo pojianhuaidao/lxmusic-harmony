@@ -7,14 +7,14 @@ const DOMAIN: number = 0x0001;
 const TAG: string = 'SyncCrypto';
 
 /**
- * 洛雪同步用到的加解密
+ * 上游同步用到的加解密
  *
  * 与官方实现对位关系：
- *   - 对称：AES-128-ECB / PKCS7（洛雪 AES_MODE.ECB_128_NoPadding 的真实取值是 Java 的 "AES"，
+ *   - 对称：AES-128-ECB / PKCS7（上游 AES_MODE.ECB_128_NoPadding 的真实取值是 Java 的 "AES"，
  *     即 AES/ECB/PKCS5Padding），密文以 base64 传输；
  *   - 非对称：RSA-2048 + OAEP(SHA-1, MGF1-SHA1)，与服务端 Node 的
  *     RSA_PKCS1_OAEP_PADDING 默认参数、移动端 OAEPWithSHA1AndMGF1Padding 一致；
- *   - 摘要：MD5 小写 hex（洛雪 toMD5 就是 crypto.createHash('md5').digest('hex')）。
+ *   - 摘要：MD5 小写 hex（上游 toMD5 就是 crypto.createHash('md5').digest('hex')）。
  *
  * AES/MD5/Base64 复用 core/music/LxCrypto.ets（纯 ArkTS，已与 node:crypto 的向量对齐），
  * 这里只补 RSA —— 它必须走系统 CryptoArchitectureKit：密钥生成与 OAEP 解密都不是
@@ -41,7 +41,7 @@ function u8ToNumbers(data: Uint8Array): number[] {
 
 // ------------------------------------------------------------------ 对称
 
-/** 由认证码/密码派生 AES 密钥：md5(code) 的前 16 个字符，再 base64（洛雪的做法） */
+/** 由认证码/密码派生 AES 密钥：md5(code) 的前 16 个字符，再 base64（上游的做法） */
 export function deriveKeyB64(authCode: string): string {
   const key: string = md5Hex(authCode).substring(0, 16);
   return toBase64(utf8Bytes(key));
@@ -73,7 +73,7 @@ export async function rsaDecryptBase64(cipherB64: string, privateKeyB64: string)
   return bytesToUtf8(u8ToNumbers(output.data));
 }
 
-/** 摘要：MD5 小写 hex（与洛雪 toMD5 一致） */
+/** 摘要：MD5 小写 hex（与上游 toMD5 一致） */
 export function toMD5(text: string): string {
   return md5Hex(text);
 }

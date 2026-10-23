@@ -51,7 +51,7 @@ export default function localMusicTest() {
       // interval 的口径与在线歌一致（mm:ss），播放页与播控中心都按它算时长
       expect(item.interval).assertEqual('04:24');
       expect(item.quality).assertEqual('local');
-      // 没有内嵌封面时用洛雪那套占位封面，而不是留一个空图
+      // 没有内嵌封面时用上游那套占位封面，而不是留一个空图
       expect(item.art).assertTrue();
       expect(item.coverUrl).assertEqual('');
     });

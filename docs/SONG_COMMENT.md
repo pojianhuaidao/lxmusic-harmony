@@ -90,7 +90,7 @@ filterList(list)                       // 按 id 去重（翻页边界会重复�
 | `entry/src/main/ets/core/music/PlatformHttp.ets` | 平台接口的 JSON / 文本请求小工具（从 `PlatformLyric.ets` 提出来共用） | `src/utils/request.js` 的那层封装 |
 | `entry/src/main/ets/views/CommentSheet.ets` | **评论页**：页签、分页列表、评论行、楼中楼 | `src/screens/Comment/`（index + CommentHot/New + components/*） |
 | `entry/src/main/ets/views/PlayerView.ets` | 入口：底部工具栏的评论钮 + 「更多」菜单里的「查看评论」 | `PlayDetail/**/CommentBtn.tsx` |
-| `entry/src/main/ets/ui/Icons.ets` | `I_COMMENT`（`sys.symbol.message`，对话气泡） | 洛雪内置的 `comment` 图标 |
+| `entry/src/main/ets/ui/Icons.ets` | `I_COMMENT`（`sys.symbol.message`，对话气泡） | 上游内置的 `comment` 图标 |
 
 ### 2.1 数据流
 
@@ -212,7 +212,7 @@ filterList(list)                       // 按 id 去重（翻页边界会重复�
 ## 4. 已知限制 / 待实测
 
 > **重要**：这份实现写完时**没有在设备上联网验证过**（只过了静态检查与整包构建）。
-> 各平台的接口是照洛雪原样移植的，但「接口现在是否还接受这种调用」必须在设备上确认。
+> 各平台的接口是照上游原样移植的，但「接口现在是否还接受这种调用」必须在设备上确认。
 > 下表是预期状态，实测后请把结论补进来（与 `docs/DEFECTS.md` 的记录规则一致）。
 
 | 平台 | 预期 | 备注 |
@@ -221,7 +221,7 @@ filterList(list)                       // 按 id 去重（翻页边界会重复�
 | kg | 可用 | 签名算法与搜索用的 `signatureParams` 同源 |
 | tx | 可用 | 最新/热门两个接口都在用；热门那条走 musicu，与歌单详情同一个端点 |
 | mg | 可用 | 游标翻页要顺序来 |
-| wy | **待实测** | 评论走的是公开 `/api/v1/resource/comments`（不是洛雪的 weapi）。wy 的搜索链路本身还没修通（`docs/DEFECTS.md` **D-001**），评论要和它一起回归 |
+| wy | **待实测** | 评论走的是公开 `/api/v1/resource/comments`（不是上游的 weapi）。wy 的搜索链路本身还没修通（`docs/DEFECTS.md` **D-001**），评论要和它一起回归 |
 
 还有两处**没做**（用得上再加）：
 

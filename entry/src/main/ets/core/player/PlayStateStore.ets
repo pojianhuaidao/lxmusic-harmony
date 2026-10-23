@@ -14,7 +14,7 @@ const FILE_NAME: string = 'play_state.json';
  * 播放模式、播放历史）。这样这里不需要认识 SongItem，也就不会和 PlaySession
  * 形成循环引用（PlaySession 依赖它，它不能再依赖 PlaySession）。
  *
- * 对应洛雪：它把播放现场存在本地（playList / playIndex / playState），重启后接着上次；
+ * 对应上游：它把播放现场存在本地（playList / playIndex / playState），重启后接着上次；
  * 本移植版此前没有这一步，重启就把「正在播放」丢了。
  */
 export class PlayStateStore {

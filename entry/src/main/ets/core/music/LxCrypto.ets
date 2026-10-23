@@ -284,7 +284,7 @@ function hex8(value: number): string {
   return out;
 }
 
-/** SHA-1(UTF-8) -> 小写 hex（与洛雪原生 CryptoModule.sha1 一致） */
+/** SHA-1(UTF-8) -> 小写 hex（与上游原生 CryptoModule.sha1 一致） */
 export function sha1Hex(input: string): string {
   const bytes: number[] = utf8Bytes(input);
   const msgLen: number = bytes.length;
@@ -468,7 +468,7 @@ function aesEncryptBlock(block: number[], w: number[]): void {
 /**
  * AES-128-ECB + PKCS7 填充，输出大写 hex。
  *
- * 注意：洛雪的 AES_MODE.ECB_128_NoPadding 实际取值是 Java 的 "AES"，
+ * 注意：上游的 AES_MODE.ECB_128_NoPadding 实际取值是 Java 的 "AES"，
  * 即 Cipher.getInstance("AES") = AES/ECB/PKCS5Padding —— 所以这里是 PKCS7 而不是 NoPadding。
  */
 export function aes128EcbPkcs7HexUpper(keyBytes: number[], dataBytes: number[]): string {

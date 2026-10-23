@@ -80,6 +80,12 @@ export struct MiniBarView {
    * 左右各留 12），它恒为展开态，且不重复给左右边距。
    */
   @Prop forceExpanded: boolean = false;
+  /**
+   * 紧凑形态（供底部栏收起态「播放条 + 页签并排」使用）：
+   * 隐藏下一首 / 队列两个控制钮与歌手行，只保留封面 + 歌名 + 播放/暂停，
+   * 让左侧播放条在并排胶囊里不挤占页签按钮的空间。
+   */
+  @Prop compact: boolean = false;
   /** 窗口宽度（vp）；0 = 还没量到，按手机档给留白 */
   @Prop windowWidth: number = 0;
   @StorageLink(K_MINI_EXPANDED) expanded: boolean = false;
@@ -223,7 +229,7 @@ export struct MiniBarView {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .width('100%')
         .textAlign(TextAlign.Start)
-      if (this.singer.length > 0) {
+      if (this.singer.length > 0 && !this.compact) {
         Text(this.singer)
           .fontSize(SINGER_SIZE)
           .lineHeight(SINGER_LINE)
@@ -261,7 +267,8 @@ export struct MiniBarView {
         IconGlyph({
           symbol: this.status === 'playing' ? I_PAUSE_CIRCLE : I_PLAY_CIRCLE,
           iconSize: CONTROL_SIZE,
-          color: C_TEXT,
+          // 华为音乐式：播放/暂停钮用品牌红高亮，与页签选中态同色
+          color: C_RED,
           replaceEffect: true,
         })
           .onClick(() => {
@@ -270,18 +277,20 @@ export struct MiniBarView {
           .accessibilityText(this.status === 'playing' ? '暂停' : '播放')
           .accessibilityLevel('yes')
       }
-      IconGlyph({ symbol: I_NEXT, iconSize: CONTROL_SIZE, color: C_ICON })
-        .onClick(() => {
-          PlaySession.getInstance().next();
-        })
-        .accessibilityText('下一首')
-        .accessibilityLevel('yes')
-      IconGlyph({ symbol: I_QUEUE, iconSize: CONTROL_SIZE, color: C_ICON })
-        .onClick(() => {
-          this.onOpenQueue();
-        })
-        .accessibilityText('播放列表')
-        .accessibilityLevel('yes')
+      if (!this.compact) {
+        IconGlyph({ symbol: I_NEXT, iconSize: CONTROL_SIZE, color: C_ICON })
+          .onClick(() => {
+            PlaySession.getInstance().next();
+          })
+          .accessibilityText('下一首')
+          .accessibilityLevel('yes')
+        IconGlyph({ symbol: I_QUEUE, iconSize: CONTROL_SIZE, color: C_ICON })
+          .onClick(() => {
+            this.onOpenQueue();
+          })
+          .accessibilityText('播放列表')
+          .accessibilityLevel('yes')
+      }
     }
   }
 

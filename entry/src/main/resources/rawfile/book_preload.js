@@ -1,7 +1,7 @@
 /**
  * 阅读（Legado）书源规则求值引擎 · HarmonyOS / ArkWeb 移植版
  *
- * 书源是「阅读」App 的 JSON 规则（bookSourceType=1 时有声书），与洛雪音源
+ * 书源是「阅读」App 的 JSON 规则（bookSourceType=1 时有声书），与上游音源
  * （JS 规则脚本 + lx.on/lx.send）完全不是一套协议，所以这里是一份独立的引擎。
  *
  * ## 为什么能在 WebView 里跑

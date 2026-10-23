@@ -12,7 +12,7 @@ interface LinkCase {
 /**
  * 真实分享文本（各平台「分享」里复制出来的样子）
  *
- * 期望值来自洛雪各平台 songList 的 listDetailLink 正则，不是照着本实现的输出反填的：
+ * 期望值来自上游各平台 songList 的 listDetailLink 正则，不是照着本实现的输出反填的：
  *   wy  /^.+(?:\?|&)id=(\d+)/ 与 /^.+\/playlist\/(\d+)\/\d+\/.+$/
  *   mg  /^.+\/playlist\/(\d+)/ 与 playlistId=id
  *   kw  /^.+\/playlist(?:_detail)?\/(\d+)/
@@ -49,7 +49,7 @@ const CASES: LinkCase[] = [
   { text: 'https://music.migu.cn/v3/music/playlist/221573417', source: 'mg', id: '221573417' },
   // 链接后面跟着中文标点（分享文案里很常见）也要能截干净
   { text: '分享歌单《测试》https://music.163.com/#/playlist?id=998877，快来听', source: 'wy', id: '998877' },
-  // 洛雪自己的分享链接（songlist/open 与 songlist/play 同一套参数）
+  // 上游自己的分享链接（songlist/open 与 songlist/play 同一套参数）
   { text: 'lxmusic://songlist/open/wy/2892110024', source: 'wy', id: '2892110024' },
   { text: 'lxmusic://songlist/play/kw/2892110024/3', source: 'kw', id: '2892110024' },
   {
@@ -57,7 +57,7 @@ const CASES: LinkCase[] = [
     source: 'kg',
     id: '1067062',
   },
-  // 直接给「平台__歌单id」（洛雪的列表标识）
+  // 直接给「平台__歌单id」（上游的列表标识）
   { text: 'wy__2892110024', source: 'wy', id: '2892110024' },
 ];
 

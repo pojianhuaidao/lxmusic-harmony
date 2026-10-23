@@ -28,7 +28,7 @@ export interface LibrarySummary {
 /**
  * 本地音乐库
  *
- * 它是「参与同步的那份数据」的唯一持有者，内容按洛雪的线上格式（LxListData）保存：
+ * 它是「参与同步的那份数据」的唯一持有者，内容按上游的线上格式（LxListData）保存：
  *   defaultList —— 试听列表（本移植版里就是播放队列）
  *   loveList    —— 我的收藏
  *   userList    —— 自建歌单（含歌曲）
@@ -39,7 +39,7 @@ export interface LibrarySummary {
  *     这里把 SongItem 转成 LxMusicInfo 后落盘、并上行同步动作；
  *   - 服务端推来的动作先改这里，再镜像回 PlaySession（并递增 K_LIBRARY_VERSION 让界面刷新）。
  *
- * 队列与试听列表：洛雪桌面端的「试听列表」就是播放队列，本移植版沿用这个含义 ——
+ * 队列与试听列表：上游桌面端的「试听列表」就是播放队列，本移植版沿用这个含义 ——
  * 播放一份列表 = 把这份列表放进试听列表并开始播放，因此队列变化会同步为
  * list_music_overwrite('default', ...)。
  */
@@ -57,7 +57,7 @@ export class LocalLibrary implements LibrarySink {
   /**
    * 本地音乐库（设备里导入进来的音频）
    *
-   * 它和这份同步数据是两个存储：本地歌不属于洛雪同步协议的范畴（官方客户端也只同步在线歌），
+   * 它和这份同步数据是两个存储：本地歌不属于上游同步协议的范畴（官方客户端也只同步在线歌），
    * 但用户明确要求「本地歌也能加进歌单和收藏」，所以这里做一层非同步侧表：
    *   - 歌单 / 收藏里**属于本地歌**的那部分 key 存在 LocalMusic 里（见它的 lists）；
    *   - 读取时合并（本地歌排在前面），写入时各写各的；
@@ -83,7 +83,17 @@ export class LocalLibrary implements LibrarySink {
 
   init(context: common.Context): void {
     this.store.init(context);
-    this.load();
+    // 音乐库 JSON（歌单 / 收藏 / 不喜欢规则）可能很大，同步 readTextSync + JSON.parse
+    // 会把冷启动主线程卡住（AGC AppFreeze THREAD_BLOCK_6S）；挪到首帧后异步加载，
+    // 加载完成后立即镜像到界面（K_LIBRARY_VERSION 递增让订阅方重读，队列 / 收藏
+    // 通过 PlaySession 发布）。PlaySession.bootstrap() 在 Index 首帧后的 setTimeout
+    // 里执行，天然晚于这里的镜像，仍保持「镜像先、现场恢复后」的既有顺序。
+    setTimeout(() => {
+      this.load();
+      if (this.initialized) {
+        this.mirrorToSession();
+      }
+    }, 0);
   }
 
   load(): void {
@@ -114,7 +124,7 @@ export class LocalLibrary implements LibrarySink {
 
   // ------------------------------------------------------------ 对外数据
 
-  /** 当前同步数据（字段顺序与洛雪一致，md5 依赖它） */
+  /** 当前同步数据（字段顺序与上游一致，md5 依赖它） */
   listData(): LxListData {
     const out: LxListData = {
       defaultList: this.data.defaultList,
@@ -384,7 +394,7 @@ export class LocalLibrary implements LibrarySink {
   /**
    * 内置收藏歌单（界面「歌单」页里那个永远存在的默认歌单）
    *
-   * 数据就是洛雪的 loveList —— 界面上当歌单用（能播放全部、能一首首删），
+   * 数据就是上游的 loveList —— 界面上当歌单用（能播放全部、能一首首删），
    * 协议上仍然是 loveList，与官方客户端的「我的收藏」互通。
    */
   favoritePlaylistSummary(): PlaylistSummary {
@@ -433,7 +443,7 @@ export class LocalLibrary implements LibrarySink {
   /**
    * 按线上歌单标识找已经导入过的本地歌单
    *
-   * 导入面板拿它判断这次是「新建」还是「更新已有歌单」。sourceListId 存的是洛雪的
+   * 导入面板拿它判断这次是「新建」还是「更新已有歌单」。sourceListId 存的是上游的
    * 列表标识 `${source}__${歌单id}`（与 core/music/PlaylistLink 解析出来的一致）。
    */
   playlistBySourceListId(sourceListId: string): PlaylistSummary | null {
@@ -449,11 +459,11 @@ export class LocalLibrary implements LibrarySink {
   }
 
   /**
-   * 导入在线歌单（对应洛雪的 addSongListDetail）
+   * 导入在线歌单（对应上游的 addSongListDetail）
    *
    * 与「新建歌单」的两点不同：
    *   1. id 由「平台 + md5(平台__歌单id)」决定，所以同一个线上歌单反复导入都是同一个
-   *      本地歌单，不会冒出一堆同名列表（洛雪也是这么算 id 的）；
+   *      本地歌单，不会冒出一堆同名列表（上游也是这么算 id 的）；
    *   2. 一起落 source / sourceListId，服务端与官方客户端认这两个字段，以后还能
    *      按它判断「这个歌单来自哪个平台」。
    * @returns 导入后的歌单；没有任何可导入的歌时返回 null
@@ -545,7 +555,7 @@ export class LocalLibrary implements LibrarySink {
   /**
    * 往歌单里加歌
    *
-   * 新加的歌放在**最前面**（保持传入顺序），与洛雪的默认设置一致
+   * 新加的歌放在**最前面**（保持传入顺序），与上游的默认设置一致
    * （list.addMusicLocationType 默认就是 'top'）：刚加完就能在歌单顶部看到，
    * 不用翻到最底下确认加没加上。上行也照这个位置报，别让别的设备加到底部去。
    */
@@ -686,7 +696,7 @@ export class LocalLibrary implements LibrarySink {
   // ------------------------------------------------------------ 不喜欢规则
 
   /**
-   * 规范化规则文本，逐条对齐洛雪 updateDislikeInfo：
+   * 规范化规则文本，逐条对齐上游 updateDislikeInfo：
    * 每行「歌名@歌手」，分隔符转义成 #，小写去空白，去掉空条目并按首次出现顺序去重。
    */
   setDislikeRules(raw: string, emitRemote: boolean = true): void {
@@ -1178,7 +1188,7 @@ function replaceInList(list: LxMusicInfoNew[], id: string, musicInfo: LxMusicInf
   return out;
 }
 
-/** 按洛雪 buildUserListInfoFull 的字段顺序重建歌单信息 */
+/** 按上游 buildUserListInfoFull 的字段顺序重建歌单信息 */
 export function buildUserListInfo(item: LxUserListInfoFull): LxUserListInfo {
   const out: LxUserListInfo = {
     id: item.id,
@@ -1190,7 +1200,7 @@ export function buildUserListInfo(item: LxUserListInfoFull): LxUserListInfo {
   return out;
 }
 
-/** 按洛雪 buildUserListInfoFull 的字段顺序重建整个歌单数组 */
+/** 按上游 buildUserListInfoFull 的字段顺序重建整个歌单数组 */
 function buildUserLists(list: LxUserListInfoFull[]): LxUserListInfoFull[] {
   const out: LxUserListInfoFull[] = [];
   for (const item of list) {
@@ -1241,9 +1251,9 @@ export function normalizeListData(input: LxListData): LxListData {
 }
 
 /**
- * 规范化不喜欢规则（逐条对齐洛雪 updateDislikeInfo，保证 md5 与官方一致）
+ * 规范化不喜欢规则（逐条对齐上游 updateDislikeInfo，保证 md5 与官方一致）
  *
- * 洛雪用 `let [name, singer] = item.split('@')`，只取前两段；这里保持一致。
+ * 上游用 `let [name, singer] = item.split('@')`，只取前两段；这里保持一致。
  * 分隔符转义成 #、小写、去空白、按首次出现顺序去重，都是官方行为。
  */
 export function normalizeDislikeRules(rules: string): string {

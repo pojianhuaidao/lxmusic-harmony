@@ -8,15 +8,15 @@ const DOMAIN: number = 0x0001;
 const TAG: string = 'LxHttp';
 
 /**
- * 洛雪自定义音源网络代理
+ * 上游自定义音源网络代理
  *
  * 移植自 lx-music-mobile/src/core/init/userApi/request.js + src/utils/request.js：
  * 源脚本里的 lx.request(url, options) 最终会走到这里，由宿主 App 发起真实请求，
  * 再把响应回灌给沙箱。请求语义（默认 UA / Content-Type 推断 / body 处理 /
- * 响应 JSON 自动解析）都与洛雪保持一致。
+ * 响应 JSON 自动解析）都与上游保持一致。
  */
 
-/** 与洛雪默认 UA 一致，部分平台的 API 会校验 UA */
+/** 与上游默认 UA 一致，部分平台的 API 会校验 UA */
 const DEFAULT_UA: string =
   'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36';
 
@@ -229,7 +229,7 @@ export function lxRequest(
   AppLog.info(TAG, `请求发起 ${method} ${url} timeout=${timeout}ms`);
 
   const headers: Record<string, string> = {};
-  // 洛雪默认带 Accept: application/json
+  // 上游默认带 Accept: application/json
   headers['Accept'] = 'application/json';
   headers['User-Agent'] = DEFAULT_UA;
   if (options.headers !== undefined) {

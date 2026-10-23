@@ -6,11 +6,11 @@ import { WEBDAV_SOURCE } from '../webdav/WebDavTypes';
 import { LxMusicInfoNew, LxMusicMeta, LxQualitySize } from './SyncTypes';
 
 /**
- * 内部歌曲（SongItem，musicInfoJson 里是洛雪「内置 SDK 形态」的 LxMusicInfo）
- * 与同步用歌曲（LxMusicInfoNew，洛雪 MusicInfoOnline 的 id/name/singer/source/interval/meta）
+ * 内部歌曲（SongItem，musicInfoJson 里是上游「内置 SDK 形态」的 LxMusicInfo）
+ * 与同步用歌曲（LxMusicInfoNew，上游 MusicInfoOnline 的 id/name/singer/source/interval/meta）
  * 之间的转换。
  *
- * 这份映射不是自己编的，是照抄洛雪官方的两个函数：
+ * 这份映射不是自己编的，是照抄上游官方的两个函数：
  *   - toNewMusicInfo（lx-music-mobile/src/utils/index.ts）：SDK 结果 -> 同步用结构
  *   - toOldMusicInfo（同文件）：同步用结构 -> SDK 结果
  * 字段顺序也照着它们摆：服务端的快照 key 是「列表数据的 JSON 字符串的 md5」，
@@ -41,7 +41,7 @@ function parseOldMusicInfo(item: SongItem): LxMusicInfo | null {
   if (typeof info.source !== 'string' || info.source.length === 0) {
     return null;
   }
-  // 本地文件与云端（WebDAV）文件都不在同步范围内（洛雪也只同步在线歌曲）：
+  // 本地文件与云端（WebDAV）文件都不在同步范围内（上游也只同步在线歌曲）：
   // 这两种条目的 musicInfo 是我们自己造的「壳」，服务端不认识，
   // 上行只会往别人的列表里塞一堆打不开的东西。
   if (info.source === LOCAL_SOURCE || info.source === WEBDAV_SOURCE) {
@@ -53,7 +53,7 @@ function parseOldMusicInfo(item: SongItem): LxMusicInfo | null {
   return info;
 }
 
-/** `_types`（{type,size,hash}）-> `_qualitys`（{size,hash}，洛雪没有 type 字段） */
+/** `_types`（{type,size,hash}）-> `_qualitys`（{size,hash}，上游没有 type 字段） */
 function toQualitySizes(input: Record<string, LxQualityItem> | undefined): Record<string, LxQualitySize> {
   const out: Record<string, LxQualitySize> = {};
   if (input === undefined || input === null) {
@@ -99,7 +99,7 @@ function toQualityItems(input: Record<string, LxQualitySize> | undefined): Recor
 }
 
 /**
- * 内部歌曲 -> 同步用歌曲（对应洛雪 toNewMusicInfo）。
+ * 内部歌曲 -> 同步用歌曲（对应上游 toNewMusicInfo）。
  * 顺序不能动：id / name / singer / source / interval / meta。
  */
 export function toLxMusicInfo(item: SongItem): LxMusicInfoNew | null {
@@ -109,7 +109,7 @@ export function toLxMusicInfo(item: SongItem): LxMusicInfoNew | null {
   }
   let qualitys: Object[] = old.types !== undefined ? old.types : [];
   let qualitySizes: Record<string, LxQualitySize> = toQualitySizes(old._types);
-  // 洛雪的兼容修正：老数据里的 flac32bit 统一成 flac24bit。
+  // 上游的兼容修正：老数据里的 flac32bit 统一成 flac24bit。
   // 官方用的是 delete + 赋值（flac24bit 会落到末尾），这里用重建对象保持同样的键顺序；
   // ArkTS 不支持 delete 运算符，所以不能用官方的写法。
   if (qualitySizes['flac32bit'] !== undefined && qualitySizes['flac24bit'] === undefined) {
@@ -243,7 +243,7 @@ export function bestQuality(info: LxMusicInfoNew): string {
 }
 
 /**
- * 同步用歌曲 -> 内部歌曲（对应洛雪 toOldMusicInfo）。
+ * 同步用歌曲 -> 内部歌曲（对应上游 toOldMusicInfo）。
  * musicInfoJson 就是内置搜索/源脚本使用的旧形态，播放链路直接吃它。
  */
 export function fromLxMusicInfo(info: LxMusicInfoNew): SongItem {
@@ -255,7 +255,7 @@ export function fromLxMusicInfo(info: LxMusicInfoNew): SongItem {
    * 老数据（收藏 / 歌单 / 同步回来的）里存的就是这种相对路径，所以在还原成内部条目
    * 这一层补一次宿主，见 MusicSearch.mgImageUrl。
    *
-   * 只补 coverUrl，不动下面 SDK 形态里的 img：那份是「与洛雪一致的数据」，同步快照
+   * 只补 coverUrl，不动下面 SDK 形态里的 img：那份是「与上游一致的数据」，同步快照
    * 按它的 JSON 算 md5，本地擅自改值会让同一份列表在两端算出的 key 对不上。
    */
   const coverUrl: string = info.source === 'mg' ? mgImageUrl(picUrl) : picUrl;

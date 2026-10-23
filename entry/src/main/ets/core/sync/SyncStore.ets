@@ -18,9 +18,9 @@ export function defaultListData(): LxListData {
 /**
  * 同步相关的本地存储
  *
- * 对应洛雪 utils/data.ts 里 syncHost / syncAuthKey 那几项，外加音乐库本身。
+ * 对应上游 utils/data.ts 里 syncHost / syncAuthKey 那几项，外加音乐库本身。
  * HarmonyOS 的 preferences 不适合存可能很大的列表数据，因此统一落到应用沙箱文件
- * （与 SourceStore 的做法一致）。列表数据按洛雪的线上格式保存，这样：
+ * （与 SourceStore 的做法一致）。列表数据按上游的线上格式保存，这样：
  *   1) 重连时计算 md5 的 JSON 与收到的报文同构，能与服务端的快照 key 对上；
  *   2) 文件本身就是「同步数据」的可读副本，排查问题直接看它即可。
  */
@@ -78,7 +78,7 @@ export class SyncStore {
     }
   }
 
-  // ------------------------------------------------------------ 音乐库（洛雪线上格式）
+  // ------------------------------------------------------------ 音乐库（上游线上格式）
 
   /** 是否已经落过一份音乐库：用来区分「首次安装（界面就是空的）」 */
   hasListData(): boolean {

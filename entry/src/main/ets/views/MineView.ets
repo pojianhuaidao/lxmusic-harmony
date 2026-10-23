@@ -10,6 +10,9 @@ import { I_BRUSH, I_CACHE, I_CHEVRON_RIGHT, I_CLOCK, I_CLOUD, I_DISC, I_DOWNLOAD
   I_HEART_FILLED, I_INFO, I_PERSON, I_REFRESH, I_VOLUME, IconGlyph } from '../ui/Icons';
 import { TopFade } from '../ui/Widgets';
 
+/** 底部栏收起/展开触发阈值（vp）：同方向累计滚动超过它才切换状态 */
+const FOLD_THRESHOLD: number = 24;
+
 /**
  * 「我的」页那一排快捷入口
  *
@@ -73,6 +76,39 @@ export struct MineView {
   /** 去某个子页面（本地音乐 / 播放历史 / 下载 / 云端 / 音源 / 同步 / 播放 / 缓存 / 下载设置 / 云音乐 / 显示 / 关于），路由由壳层实现 */
   onNavigate: (action: string) => void = () => {
   };
+  /** 壳层底部栏收起/展开回调：内容下滑（offset 增大）传 true 收起，上滑传 false 展开 */
+  onFoldChange: (folded: boolean) => void = () => {
+  };
+  /** 上次滚动偏移量 / 向下(收起)累计 / 向上(展开)累计：同方向累计超过阈值才回调一次 */
+  private foldAccumDown: number = 0;
+  private foldAccumUp: number = 0;
+
+  /**
+   * 把滚动增量上报给壳层：内容向上滚（手指上滑浏览，yOffset 为正）累计超过阈值 → 收起并排，
+   * 内容向下滚（回顶，yOffset 为负）累计超过阈值 → 展开两行。
+   *
+   * 华为文档明确 onScroll 回调的 xOffset/yOffset 是「相对上一帧的增量」而非绝对偏移，
+   * 所以这里直接消费增量即可（不要再用 lastFoldY 做差，那会把增量二次求差、永远≈0，
+   * 导致下拉/上拉都触发不了收展）。同一方向连续累计，超过 FOLD_THRESHOLD vp 才回调一次；
+   * 出现另一方向时立即清零对方累计 —— 轻微抖动、松手惯性回弹（几 vp）都不会误触。
+   */
+  private handleFoldScroll(delta: number): void {
+    if (delta > 0) {
+      this.foldAccumUp = 0;
+      this.foldAccumDown += delta;
+      if (this.foldAccumDown >= FOLD_THRESHOLD) {
+        this.foldAccumDown = 0;
+        this.onFoldChange(true);
+      }
+    } else if (delta < 0) {
+      this.foldAccumDown = 0;
+      this.foldAccumUp += -delta;
+      if (this.foldAccumUp >= FOLD_THRESHOLD) {
+        this.foldAccumUp = 0;
+        this.onFoldChange(false);
+      }
+    }
+  }
   /** 内置那张收藏歌单（我的收藏）里的歌数 —— 快捷入口「收藏」下面那行数字 */
   @State favoriteCount: number = 0;
   @State localCount: number = 0;
@@ -245,17 +281,6 @@ export struct MineView {
     .accessibilityLevel('yes')
   }
 
-  /** 设置卡下面那行小字说明（与原来设置页同一套语汇） */
-  @Builder
-  hint(text: string) {
-    Text(text)
-      .fontSize(12)
-      .fontColor(C_TEXT_SUB)
-      .width('100%')
-      .padding({ left: 18, right: 4 })
-      .textAlign(TextAlign.Start)
-  }
-
   /**
    * 设置卡（原设置页的入口整体搬过来，一张卡三段）
    *
@@ -268,9 +293,7 @@ export struct MineView {
   @Builder
   linksCard() {
     Column() {
-      // ------------------------------------------------ 第 1 段：同步提示 + 设置六宫格
-      this.hint('与洛雪同步服务连接后，试听列表 / 收藏 / 歌单 / 不喜欢的歌曲可与其它设备互通')
-
+      // ------------------------------------------------ 第 1 段：设置六宫格
       Divider()
         .strokeWidth(0.6)
         .color(C_DIVIDER)
@@ -326,6 +349,9 @@ export struct MineView {
         }
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onScroll((_xOffset: number, yOffset: number) => {
+          this.handleFoldScroll(yOffset);
+        })
         .layoutWeight(1)
         .align(Alignment.Top)
         .width('100%')

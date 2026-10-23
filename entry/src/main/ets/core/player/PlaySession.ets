@@ -8,7 +8,7 @@ import { AudioCache } from '../music/AudioCache';
 import { CachedLyricInfo, MediaCache, mediaKeyOf } from '../music/MediaCache';
 import { LyricLine, parseLyric } from '../music/Lyric';
 import { musicIdOf } from '../music/MusicId';
-import { PlatformLyric, fetchPlatformLyric } from '../music/PlatformLyric';
+import { PlatformLyric, fetchPlatformLyricWithFallback } from '../music/PlatformLyric';
 import { BridgeResult, LxQuality, SupportedSource } from '../source/LxTypes';
 import { PlayStateStore } from './PlayStateStore';
 import { ShuffleBag } from './ShuffleBag';
@@ -96,7 +96,7 @@ export const K_LIBRARY_VERSION: string = 'ps_library_version';
  * 音乐库变更的接收方
  *
  * 同步模块（LocalLibrary）实现它：界面上对歌单/收藏/播放队列的本地改动会经由它
- * 转成洛雪的同步动作上行到服务端。PlaySession 本身不依赖同步模块，避免循环引用。
+ * 转成上游的同步动作上行到服务端。PlaySession 本身不依赖同步模块，避免循环引用。
  */
 export interface LibrarySink {
   onLocalListsChanged(): void;
@@ -108,7 +108,7 @@ export interface SongItem {
   name: string;
   singer: string;
   coverUrl: string;
-  /** 无真实封面时是否使用洛雪内置的黑心占位封面 */
+  /** 无真实封面时是否使用上游内置的黑心占位封面 */
   art: boolean;
   /** 平台：kw / kg / mg / tx / wy；本地歌与云端歌带自己的 source（见 LOCAL_SOURCE） */
   source: string;
@@ -192,7 +192,7 @@ let itemSeq: number = 0;
 /**
  * 两条记录是不是同一首歌
  *
- * 不能用 id 直接比：队列落库再读回来时，条目 id 会变成洛雪新格式的
+ * 不能用 id 直接比：队列落库再读回来时，条目 id 会变成上游新格式的
  * `${source}_${songmid}`（见 SyncConvert.fromLxMusicInfo），跟界面上的 `search_12` 对不上。
  * 所以按 musicInfo 里的「平台 + 歌曲 id（+ 酷狗的 hash）」比，这才是一首歌的真正身份；
  * 没有 musicInfo 的条目退回「歌名 + 歌手」。
@@ -252,7 +252,7 @@ export class PlaySession {
     return PlaySession.instance;
   }
 
-  /** 播放队列（对应洛雪的「播放列表」） */
+  /** 播放队列（对应上游的「播放列表」） */
   queue: SongItem[] = [];
   currentIndex: number = -1;
   /** 播放历史（我的 -> 播放历史） */
@@ -344,7 +344,7 @@ export class PlaySession {
    * 这一轮播放的缓存现场
    *
    * 平台给的播放地址带时效，缓存里的地址可能已经过期。命中缓存却放不出来时，
-   * 丢掉这条缓存重新解析一次（洛雪 isRefresh 的等价做法），别让用户干看着失败。
+   * 丢掉这条缓存重新解析一次（上游 isRefresh 的等价做法），别让用户干看着失败。
    */
   private currentCacheKey: string = '';
   private currentCacheQuality: string = '';
@@ -1052,7 +1052,7 @@ export class PlaySession {
     this.currentIndex = -1;
     this.bumpQueueVersion();
     this.pushQueueState();
-    // 播放队列即洛雪的「试听列表」，换队列要同步出去
+    // 播放队列即上游的「试听列表」，换队列要同步出去
     this.notifyLibrary();
     await this.playAt(startIndex);
   }
@@ -1435,7 +1435,7 @@ export class PlaySession {
       }
       audioCache.setPlayingPath('');
 
-      // 2) 播放地址缓存（洛雪的 @music_url__<id>_<quality>）
+      // 2) 播放地址缓存（上游的 @music_url__<id>_<quality>）
       const mediaCacheRef = MediaCache.getInstance();
       let url: string = mediaCacheRef.getMusicUrl(cacheKey, quality);
       const fromCache: boolean = url.length > 0;
@@ -1957,7 +1957,7 @@ export class PlaySession {
         this.applyLyricResult(token, cached.lyric, cached.tlyric);
         return;
       }
-      const result: PlatformLyric = await fetchPlatformLyric(info);
+      const result: PlatformLyric = await fetchPlatformLyricWithFallback(info);
       if (this.lyricToken !== token) {
         return;
       }
@@ -2064,7 +2064,7 @@ export class PlaySession {
         this.applyLyricResult(token, cached.lyric, cached.tlyric);
         return;
       }
-      const result: PlatformLyric = await fetchPlatformLyric(info);
+      const result: PlatformLyric = await fetchPlatformLyricWithFallback(info);
       if (this.lyricToken !== token) {
         return;
       }
@@ -2092,9 +2092,9 @@ export class PlaySession {
 
   /**
    * 取词：平台源的 source 协议里本来就没有歌词能力（action 白名单只有 musicUrl），
-   * 所以内置平台歌词才是主力（kw/kg/tx，与洛雪一致）；源自带 lyric 时优先用源的。
+   * 所以内置平台歌词才是主力（kw/kg/tx，与上游一致）；源自带 lyric 时优先用源的。
    *
-   * 取词前先查缓存（洛雪的 @lyric__<id>）：歌词是逐字不变的，没必要每次播放都重新请求、
+   * 取词前先查缓存（上游的 @lyric__<id>）：歌词是逐字不变的，没必要每次播放都重新请求、
    * 也不会因为源脚本抽风导致「上次有词这次没词」。
    */
   private async fetchLyric(item: SongItem): Promise<PlatformLyric> {
@@ -2133,7 +2133,7 @@ export class PlaySession {
     }
     try {
       const info: LxMusicInfo = JSON.parse(item.musicInfoJson) as LxMusicInfo;
-      const result: PlatformLyric = await fetchPlatformLyric(info);
+      const result: PlatformLyric = await fetchPlatformLyricWithFallback(info);
       if (result.lyric.length === 0) {
         hilog.info(DOMAIN, TAG, 'no lyric for %{public}s %{public}s', item.source, item.name);
       }

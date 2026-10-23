@@ -85,7 +85,7 @@ function initialsOf(name: string): string {
   return trimmed.substring(0, 1);
 }
 
-/** 洛雪在封面加载出来之前用的那套黑色占位封面（黑底 + 白心 + 金点） */
+/** 上游在封面加载出来之前用的那套黑色占位封面（黑底 + 白心 + 金点） */
 @Component
 struct HeartCover {
   @Prop boxSize: number = 48;
@@ -141,7 +141,7 @@ export struct CoverArt {
   /** url 变化时重新给一次机会：上一首加载失败不算这一首的（见 onUrlChanged） */
   @Prop @Watch('onUrlChanged') url: string = '';
   @Prop name: string = '';
-  /** 是否使用洛雪那套黑心占位封面 */
+  /** 是否使用上游那套黑心占位封面 */
   @Prop art: boolean = false;
   /**
    * 兜底图换成听·音乐的应用图标（全屏播放器 / 底部迷你播放器开，列表类别开）

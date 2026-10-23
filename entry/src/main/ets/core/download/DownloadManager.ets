@@ -40,7 +40,7 @@ const PUBLIC_URI_PREFIX: string = 'file://docs';
 const PUBLIC_DOWNLOAD_PATH_PREFIX: string = '/storage/Users/currentUser/Download/';
 const INDEX_FILE: string = 'downloads.json';
 const PART_SUFFIX: string = '.part';
-/** 同时下载数：跟着洛雪的 download.maxDownloadNum 取 2，少占带宽也少被平台限流 */
+/** 同时下载数：跟着上游的 download.maxDownloadNum 取 2，少占带宽也少被平台限流 */
 const MAX_ACTIVE: number = 2;
 /** 文件名长度上限（含扩展名），太长的名字部分文件系统会写失败 */
 const MAX_NAME_LEN: number = 90;

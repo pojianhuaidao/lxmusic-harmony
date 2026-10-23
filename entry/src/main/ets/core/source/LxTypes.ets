@@ -1,11 +1,11 @@
 /**
- * 洛雪音乐自定义音源 —— 类型定义
+ * 上游项目自定义音源 —— 类型定义
  *
  * 这里的结构对齐 lx-music-mobile 的 LX.UserApi.* / LX.Music.* 定义，
  * 便于直接复用官方音源脚本（源规则）。
  */
 
-/** 音质，对应洛雪 LX.Quality */
+/** 音质，对应上游 LX.Quality */
 export type LxQuality = '128k' | '320k' | 'flac' | 'flac24bit';
 
 /** 源脚本头部注释里声明的元信息（@name / @description / @version / @author / @homepage） */

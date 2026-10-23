@@ -1,13 +1,13 @@
-# 洛雪音乐源引擎 · HarmonyOS 移植说明
+# 上游项目源引擎 · HarmonyOS 移植说明
 
-本文说明洛雪音乐「自定义音源（源规则）」核心引擎在原工程中的位置，以及它被移植到本
+本文说明上游项目「自定义音源（源规则）」核心引擎在原工程中的位置，以及它被移植到本
 HarmonyOS 工程（`listen`）后的实现结构、对外 API 和测试方法。
 
 ---
 
-## 1. 洛雪原工程里的核心引擎
+## 1. 上游原工程里的核心引擎
 
-洛雪的自定义音源是一个**用 JS 写的规则脚本**，因此引擎要做两件事：
+上游的自定义音源是一个**用 JS 写的规则脚本**，因此引擎要做两件事：
 
 1. **导入/解析源**：读取脚本头部的 `@name/@version/...` 元信息并存起来；
 2. **执行源规则**：把脚本放进一个 JS 沙箱跑起来，暴露 `lx` API，脚本通过
@@ -71,7 +71,7 @@ HarmonyOS 没有可直接调用的通用 JS 引擎，所以沙箱改用 **ArkWeb
 `lx.request` 产生的网络请求由 ArkTS 用 `@ohos.net.http` 代理。整体是「沙箱 + 宿主代理网络」
 的同一架构。
 
-| 文件 | 职责 | 对应洛雪 |
+| 文件 | 职责 | 对应上游 |
 | --- | --- | --- |
 | `entry/src/main/resources/rawfile/lx_utils.js` | 纯 JS 工具：md5 / base64 / buffer / AES-128-CBC / AES-128-ECB / RSA-NoPadding | 原生 `__lx_native_call__utils_*` |
 | `entry/src/main/resources/rawfile/lx_preload.js` | 沙箱内 `lx` API：`request/send/on/utils/currentScriptInfo`，事件与校验逻辑 | `user-api-preload.js` |
@@ -162,7 +162,7 @@ ArkWeb 的 `runJavaScript` 有个坑：**脚本执行失败时返回 `null`，�
 2. 如果脚本执行后没有注册 `request` 处理器，会自动改用
    **`runJavaScriptExt(ArrayBuffer)`**（API 12+ 支持传字节）重新注入一次并复检——
    大脚本用字符串注入更容易失败，这是官方给大脚本留的通道。
-3. 日志里会打印**脚本长度 + 头部 160 字 + 尾部 160 字**，一眼就能看出它是不是标准的洛雪源脚本。
+3. 日志里会打印**脚本长度 + 头部 160 字 + 尾部 160 字**，一眼就能看出它是不是标准的上游源脚本。
 
 ---
 
@@ -200,8 +200,8 @@ const playUrl = await engine.getMusicUrl(musicInfoJson, '320k', 'kw');
 
 ### 完整流程：URL 导入源 → 搜索 → 播放
 
-注意洛雪的自定义源协议里**没有搜索**（`user-api-preload.js` 的 `supportActions` 只有
-`musicUrl`/`lyric`/`pic`）。洛雪的搜索来自内置平台 SDK，所以这里把 kw/kg/mg 的搜索也移植到了
+注意上游的自定义源协议里**没有搜索**（`user-api-preload.js` 的 `supportActions` 只有
+`musicUrl`/`lyric`/`pic`）。上游的搜索来自内置平台 SDK，所以这里把 kw/kg/mg 的搜索也移植到了
 宿主侧（`MusicSearch.ets`），搜索得到 musicInfo 后再交给导入的源规则去解析播放链接。
 
 ```ts
@@ -287,18 +287,18 @@ await LxPlayer.getInstance().playUrl(url);
 
 #### 音源去重
 
-洛雪每次导入都生成新的 `user_api_<rand>_<ts>` 并追加，同一个源导入两次就会出现两条
+上游每次导入都生成新的 `user_api_<rand>_<ts>` 并追加，同一个源导入两次就会出现两条
 一模一样的记录。本工程用 `sourceMetaKey()`（`LxMetadata.ets`，键 = 名字 + 版本 + 作者）：
 
 - `SourceEngine.importSource()` 命中已有 key 时不再追加：脚本内容相同 → 跳过；
   内容不同 → `SourceStore.replace()` 原地覆盖（id 不变，已加载引用与播放列表不受影响）；
 - `SourceEngine.prepare()` 启动时调 `dedupeStored()` 清理历史遗留的重复项。
 
-#### 歌词：内置平台歌词是主力（与洛雪一致）
+#### 歌词：内置平台歌词是主力（与上游一致）
 
 平台源的 `actions` 白名单里**只有 `musicUrl`**（`lx_preload.js` / 官方
 `user-api-preload.js` 的 `supportActions`，`handleInit` 取的是交集），也就是说
-「拿歌词」本来就不属于源规则。洛雪自己走的是内置平台 SDK
+「拿歌词」本来就不属于源规则。上游自己走的是内置平台 SDK
 （`src/utils/musicSdk/*/lyric.js` 的 `musicSdk[source].getLyric`），所以这里同样
 移植了内置歌词（`core/music/PlatformLyric.ets`），**不依赖任何源、开箱有词**：
 
@@ -306,7 +306,7 @@ await LxPlayer.getInstance().playUrl(url);
 | --- | --- | --- | --- |
 | kw | `GET mlyric.kuwo.cn/mobi.s?f=web&type=lyric&lrcx=1&rid={songmid}` | 响应是 `TP=content\r\n\r\n` + **zlib 流** → 解压 → base64 → 循环 XOR `yeelion` → 明文 LRC | `kw/decodeLyric.js`、`kw/lyric.js` |
 | kg | `GET lyrics.kugou.com/search` → `GET lyrics.kugou.com/download?fmt=lrc` | `content` 是 **base64 的明文 LRC**；返回 `fmt=krc`（加密格式）时放弃 | `kg/lyric.js` |
-| tx | `GET c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?...&nobase64=1`（需 `Referer`） | 直接返回明文 LRC，数字实体要解码 | 洛雪 tx/lyric.js 里注释掉的旧路径 |
+| tx | `GET c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?...&nobase64=1`（需 `Referer`） | 直接返回明文 LRC，数字实体要解码 | 上游 tx/lyric.js 里注释掉的旧路径 |
 | mg | `POST c.musicapp.migu.cn/MIGUM2.0/v1.0/content/resourceinfo.do?resourceType=2`（form `resourceId`）拿 `lrcUrl` → `GET lrcUrl` | 明文 LRC；只有 `mrcUrl`（加密）的新歌放弃 | `mg/lyric.js` + `mg/musicInfo.js` |
 | wy | eapi `/api/song/lyric/v1` | **取不到**：直接请求返回 404（连它的搜索接口也 404），先不实现 | — |
 
@@ -327,9 +327,9 @@ await LxPlayer.getInstance().playUrl(url);
 同一个道理：源协议的 action 白名单里也没有「取评论」，所以评论同样只走内置平台接口
 （`core/music/PlatformComment.ets`），与导入的音源无关。入口在播放页底部工具栏与会话
 「更多」菜单里。平台接口的差异（酷狗的签名、咪咕的游标翻页、QQ 的两套接口、网易改用公开
-GET 等）、与洛雪的差异、以及**尚未在设备上实测**这件事，都写在 `docs/SONG_COMMENT.md`。
+GET 等）、与上游的差异、以及**尚未在设备上实测**这件事，都写在 `docs/SONG_COMMENT.md`。
 
-内置搜索已覆盖 5 个平台，移植自洛雪的 `src/utils/musicSdk/*/musicSearch.js`：
+内置搜索已覆盖 5 个平台，移植自上游的 `src/utils/musicSdk/*/musicSearch.js`：
 
 | 平台 | 是否需要签名 | 参考实现 |
 | --- | --- | --- |
@@ -338,7 +338,7 @@ GET 等）、与洛雪的差异、以及**尚未在设备上实测**这件事，
 | 咪咕 mg | md5 签名 | `mg/musicSearch.js` |
 | QQ tx | zzcSign（SHA-1 派生） | `tx/musicSearch.js` + `tx/utils/crypto.js` |
 | 网易 wy | eapi（md5 + AES-128-ECB/PKCS7） | `wy/musicSearch.js` + `wy/utils/crypto.js` |
-| 喜马拉雅 xm | —— | **洛雪里整块被注释掉的死代码**，无实现可移植 |
+| 喜马拉雅 xm | —— | **上游里整块被注释掉的死代码**，无实现可移植 |
 
 > ⚠️ **待复核（已登记为 `docs/DEFECTS.md` D-001）**：2026-09 直接请求网易的 eapi 端点
 > （搜索 `/api/search/song/list/page` 与歌词 `/api/song/lyric/v1`）都返回 `code:404`，
@@ -346,22 +346,22 @@ GET 等）、与洛雪的差异、以及**尚未在设备上实测**这件事，
 > 需要对着网易现有接口重做（其余四个平台的搜索/歌词本次都实测可用）。
 > 处理步骤、实测证据与验收标准都写在 D-001 里。
 
-搜索结果的字段与洛雪旧版 musicInfo 一致，可直接 `JSON.stringify` 交给源规则。
-tx 结果额外带 `songId/albumMid/strMediaMid`（tx 源取流需要），wy 结果音质按洛雪
+搜索结果的字段与上游旧版 musicInfo 一致，可直接 `JSON.stringify` 交给源规则。
+tx 结果额外带 `songId/albumMid/strMediaMid`（tx 源取流需要），wy 结果音质按上游
 `privilege` 的 switch **穿透**规则生成（`maxbr=999000` 会同时给出 flac/320k/128k）。
 
 ### tx / wy 的签名细节（都在 `LxCrypto.ets` 里，与 `node:crypto` 对齐）
 
-- **tx `createZzcSign`**：`sha1(text)` 取 hex，按洛雪给定的两组下标各取一段，
+- **tx `createZzcSign`**：`sha1(text)` 取 hex，按上游给定的两组下标各取一段，
   再把 20 个固定值与 hash 的字节两两 XOR，base64 后去掉 `\ / + =`，拼成
-  `zzc<part1><b64><part2>` 再转小写。洛雪的下标表里有个**越界下标 40**，
+  `zzc<part1><b64><part2>` 再转小写。上游的下标表里有个**越界下标 40**，
   原版靠 `Array.join` 把 `undefined` 变成空串，这里显式跳过越界下标以保持同样输出。
-  请求体是带 `searchid` 随机数的 JSON，**键顺序必须与洛雪一致**（签名算的就是这个串）。
+  请求体是带 `searchid` 随机数的 JSON，**键顺序必须与上游一致**（签名算的就是这个串）。
 - **wy `createEapiParams`**（⚠️ 这条链路目前不通，见 `docs/DEFECTS.md` **D-001**）：
   `digest = md5("nobody"+url+"use"+text+"md5forencrypt")`，
   `data = url + "-36cd479b6b5-" + text + "-36cd479b6b5-" + digest`，
   `params = hexUpper(AES-128-ECB/PKCS7(key='e82ckenh8dichen8', data))`。
-- ⚠️ **一个容易抄错的地方**：洛雪的 `AES_MODE.ECB_128_NoPadding` 取值是 Java 的
+- ⚠️ **一个容易抄错的地方**：上游的 `AES_MODE.ECB_128_NoPadding` 取值是 Java 的
   `"AES"`，而 `Cipher.getInstance("AES")` 默认是 **ECB/PKCS5Padding** ——所以 ECB
   路径实际是**带填充**的。沙箱 `lx_utils.js` 里原先按真正的 NoPadding 实现，
   已修正为 PKCS7（同时保留 `ECB_NoPadding` 供需要真 NoPadding 的场景）。
@@ -509,7 +509,7 @@ node tools/live_source_probe.js ./.probe/qdy.js wy 听妈妈的话 '{"songmid":"
 | ikun / flower / grass | 域名无法解析 / 初始化即报「服务器异常」 |
 | 独家音源（`88.lxmusic.*`） | 接口可达但返回 403 block ip |
 
-> 这就是洛雪架构的固有现实：洛雪本身**不内置任何 `getMusicUrl`**（各平台目录里没有
+> 这就是上游架构的固有现实：上游本身**不内置任何 `getMusicUrl`**（各平台目录里没有
 > `musicUrl.js`，公开 commit 也删掉了试听接口），播放能力完全来自第三方音源。
 > 第三方中转服务随时会挂，所以「换个源」是常态而不是本工程的 bug。
 > 只要源可用，本工程就能正确解析并播放——qdy 的 kw/wy 已经端到端验证过。
@@ -524,28 +524,28 @@ node "C:\Program Files\Huawei\DevEco Studio\tools\node\node.exe" ^
 
 ---
 
-## 6. 与洛雪的差异 / 已知限制
+## 6. 与上游的差异 / 已知限制
 
-1. **沙箱实现**：洛雪用 QuickJS（无 DOM、只暴露 `__lx_native_call__*`）；这里用 ArkWeb，
+1. **沙箱实现**：上游用 QuickJS（无 DOM、只暴露 `__lx_native_call__*`）；这里用 ArkWeb，
    已在 preload 中移除 `fetch/XMLHttpRequest/WebSocket/localStorage...` 并禁用 `eval`，
    网络强制走宿主代理 `lx.request`，但隔离强度仍弱于 QuickJS。若要更强隔离，
    可换用独立 Web 调试域/隔离世界或接入原生 QuickJS NAPI。
-2. **binary 响应**：洛雪返回 Buffer 对象；这里返回字节数组（`number[]`），
+2. **binary 响应**：上游返回 Buffer 对象；这里返回字节数组（`number[]`），
    `lx.utils.buffer.bufToString(bytes, 'base64')` 可直接使用。多数音源的 `musicUrl`
    不走 binary。
 3. **musicInfo 来源 / 内置搜索范围**：自定义音源只负责「给定 musicInfo → 播放链接」。
    本工程已移植 **kw / kg / mg / tx / wy** 五个平台的内置搜索（含 tx 的 zzcSign、
-   wy 的 eapi 加密），喜马拉雅 xm 在洛雪里是整块注释掉的死代码，没有实现可移植。
+   wy 的 eapi 加密），喜马拉雅 xm 在上游里是整块注释掉的死代码，没有实现可移植。
    搜索出的结果直接就是旧版 musicInfo，无需再经 `toNewMusicInfo/toOldMusicInfo` 转换。
-4. **musicInfo 字段要「该没有的就没有」**：洛雪里 kw / mg / tx / wy 的 musicInfo
+4. **musicInfo 字段要「该没有的就没有」**：上游里 kw / mg / tx / wy 的 musicInfo
    **根本没有 `hash` 字段**，只有 kg 有。源脚本普遍写 `musicInfo.hash ?? musicInfo.songmid`，
    如果把 `hash` 写成空串，`??` 不会回退，songId 变成空串，接口直接报参数错误。
    所以 `LxMusicInfo.hash` 是可选字段，`createInfo()` 只在 hash 非空时才写入
    （单元测试用 `JSON.stringify(info).includes('"hash"')` 守住这一点）。
 5. **封面 `pic` action**：引擎已支持消息契约，但暂未封装成 `getPic()` 便捷方法
    （`lyric` 已封装为 `getLyric()`）。
-6. **`xm` 平台**：洛雪 `supportedActions` 里包含 `xm`，但 `allSources` 过滤列表不含它，
-   行为与洛雪一致。
+6. **`xm` 平台**：上游 `supportedActions` 里包含 `xm`，但 `allSources` 过滤列表不含它，
+   行为与上游一致。
 7. **换源走「页面内重置」而不是 `refresh()`**：只加载一次沙箱页，
    换源时调 `__lx_destroy__()` 清状态再重新注入 preload，源脚本用 IIFE 包裹保证隔离
    （原因见「坑 2」）。换源时会 `abortHttpRequests()` 中断上一个源尚未返回的网络请求。

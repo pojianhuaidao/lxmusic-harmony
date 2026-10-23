@@ -15,12 +15,18 @@ export const K_ACCOUNT_NAME: string = 'hw_account_name';
 
 const ACCOUNT_FILE: string = 'account.json';
 const BACKUP_SUBDIR: string = 'huawei_backup';
-const BACKUP_FILE: string = 'lx_data_hw.lxmc';
+/** 备份文件名：品牌切割后统一为 music_data_hm.mbak（WebDAV 与华为云共用同一命名） */
+const BACKUP_FILE: string = 'music_data_hm.mbak';
+/** 旧版华为云备份文件名（品牌切割前的 lx 前缀命名），恢复时兼容读取，不再写入 */
+const LEGACY_BACKUP_FILE: string = 'lx_data_hw.lxmc';
 /**
  * 华为云空间端云文件协同目录（应用沙箱 el2/cloud，写入后由系统自动同步到
  * 使用者自己的华为云空间；不再使用 AGC Cloud Storage 项目 Bucket）。
+ *
+ * 迁移说明：目录名由 lxmusic_backups 改为 music_backups（品牌切割）。旧版本备份
+ * 文件仍保留在华为云空间 lxmusic_backups/ 下，升级后如要找回历史备份可手动迁移合并。
  */
-const CLOUD_DIR: string = '/data/storage/el2/cloud/lxmusic_backups';
+const CLOUD_DIR: string = '/data/storage/el2/cloud/music_backups';
 
 interface AccountRecord {
   uid: string;
@@ -31,7 +37,7 @@ interface AccountRecord {
 /**
  * 候选应用数据根目录
  *
- * storageRootDir 每次进程启动探测一次：公共 Download/LxMusicData 能建目录就返回它，
+ * storageRootDir 每次进程启动探测一次：公共 Download/MusicData 能建目录就返回它，
  * 否则回退沙箱 filesDir。公共目录可写性（媒体权限/系统状态）波动时，两次启动可能
  * 落到不同根目录，导致 account.json / huawei_backup 明明写过却读不到（表现为
  * 「重开未登录」「备份后拉不到恢复文件」）。这里把两个候选根都列出来，读写时都覆盖。
@@ -62,14 +68,12 @@ export interface AccountBackupResult {
  * 持久化 account.json（公共 Download 根目录）；displayName 为空时回退显示「华为账号」。
  * 退出登录调用 auth.signOut() 注销 AGC 会话并清本地登录态。
  * 备份 / 恢复：音乐库数据打包后写入华为云空间端云文件协同目录
- * （el2/cloud/lxmusic_backups/lx_data_hw.lxmc），由系统自动同步到使用者自己的
- * 华为云空间；同时写一份本地端侧镜像（公共 Download/LxMusicData/huawei_backup）
+ * （el2/cloud/music_backups/music_data_hm.mbak），由系统自动同步到使用者自己的
+ * 华为云空间；同时写一份本地端侧镜像（公共 Download/MusicData/huawei_backup）
  * 作冗余与旧版兼容。不再使用 AGC Cloud Storage 项目 Bucket（作者空间）。
  */
 export class HuaweiAccount {
   private static instance: HuaweiAccount | null = null;
-  /** AGC Cloud Storage 是否已初始化成功 */
-  private cloudReady: boolean = false;
 
   static getInstance(): HuaweiAccount {
     if (HuaweiAccount.instance === null) {
@@ -235,30 +239,138 @@ export class HuaweiAccount {
     }
   }
 
+  /**
+   * 递归创建目录，已存在（File exists / EEXIST）时静默通过。
+   * 个别文件系统/版本对已存在目录的 mkdirSync(recursive=true) 仍抛 EEXIST，
+   * 直接忽略即可，避免第二次备份被 File exists 误拦。
+   */
+  private static mkdirIgnoreExists(dir: string): void {
+    try {
+      fs.mkdirSync(dir, true);
+    } catch (e) {
+      const msg: string = (e as Error).message !== undefined ? (e as Error).message : '';
+      if (msg.indexOf('File exists') >= 0 || msg.indexOf('EEXIST') >= 0) {
+        return;
+      }
+      const errMsg: string = msg.length > 0 ? msg : '未知错误';
+      throw new Error(errMsg);
+    }
+  }
+
+  /**
+   * 以 CREATE|TRUNC 覆盖打开文件；个别文件系统对已存在文件误报 File exists 时，
+   * 先删除旧文件再重开，保证覆盖写成功。
+   */
+  private static openFileForceCreate(path: string): fs.File {
+    try {
+      return fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+    } catch (e) {
+      const msg: string = (e as Error).message !== undefined ? (e as Error).message : '';
+      if (msg.indexOf('File exists') >= 0 || msg.indexOf('EEXIST') >= 0) {
+        try {
+          fs.unlinkSync(path);
+        } catch (e2) {
+          // 旧文件删除失败（如不存在）不影响继续打开
+        }
+        return fs.openSync(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      }
+      const errMsg2: string = msg.length > 0 ? msg : '未知错误';
+      throw new Error(errMsg2);
+    }
+  }
+
   /** 确保华为云空间同步目录存在（el2/cloud 下，写入后系统自动同步到使用者云空间） */
   private async ensureCloudDir(): Promise<void> {
-    if (this.cloudReady) {
-      return;
+    // 每次实查（不做进程内缓存：目录可能因云空间开关关闭/系统清理而失效，
+    // 缓存短路会导致后续 openSync 报 No such file or directory）。
+    // 逐级实查+创建：一次性 mkdirSync(CLOUD_DIR, true) 在端云协同 VFS 下可能
+    // 「假成功」（access/mkdir 不抛错但目录实体未建立），导致文件级 openSync
+    // 报 No such file or directory。逐级创建可尽早暴露失效层级。
+    const segments: string[] = CLOUD_DIR.split('/').filter((s: string) => s.length > 0);
+    let current: string = '';
+    for (let i = 0; i < segments.length; i++) {
+      current = current + '/' + segments[i];
+      try {
+        fs.accessSync(current);
+        continue;
+      } catch (e) {
+        // 目录不存在，继续创建
+      }
+      try {
+        HuaweiAccount.mkdirIgnoreExists(current);
+      } catch (e) {
+        const msg: string = (e as Error).message !== undefined ? (e as Error).message : '未知错误';
+        hilog.error(DOMAIN, TAG, 'create cloud sync dir failed: %{public}s', msg);
+        throw new Error(`创建华为云空间同步目录失败：${msg}。请在系统「设置 -> 云空间」中确认本应用同步开关已打开`);
+      }
+      // 创建后立即复核：个别环境 mkdir 静默成功但目录仍不可访问
+      try {
+        fs.accessSync(current);
+      } catch (e) {
+        throw new Error('创建华为云空间同步目录失败：目录不可访问。请在系统「设置 -> 云空间」中确认本应用同步开关已打开');
+      }
     }
-    // 目录已存在则直接复用，避免 mkdirSync 对已存在目录抛 File exists
-    let dirExists: boolean = false;
+    // 终态写探针：验证目录可真实写入（access 假成功时 openSync 会报 ENOENT，
+    // 这里把「目录存在但云会话未接管」提前暴露成可读提示，而不是备份中途失败）
+    const probe: string = `${CLOUD_DIR}/.probe_${Date.now()}`;
+    const probeWrite: () => void = (): void => {
+      const file: fs.File = HuaweiAccount.openFileForceCreate(probe);
+      fs.closeSync(file);
+      fs.unlinkSync(probe);
+    };
     try {
-      fs.accessSync(CLOUD_DIR);
-      dirExists = true;
+      probeWrite();
     } catch (e) {
-      dirExists = false;
+      // 探针失败先激活端云协同会话再重试一次：
+      // el2/cloud 目录由系统云空间接管，首次写入前需先 FileSync().start() 激活同步
+      // 会话，否则 openSync 会被 VFS 拒绝（表现为「目录不可写 / 端云协同未就绪」）。
+      // 爱阅读范式是「写文件后 start()」，但若探针在 start() 之前执行就会死锁——
+      // 未激活时任何写入都被拒，永远走不到 start()。这里把 start() 前移到探针之前，
+      // 激活后云会话接管目录，重试探针应能通过；仍失败才判定端云协同未就绪。
+      const msg: string = (e as Error).message !== undefined ? (e as Error).message : '';
+      hilog.warn(DOMAIN, TAG, 'cloud dir probe failed, activating sync session: %{public}s', msg);
+      const onProbeActivate = (pg: cloudSync.SyncProgress): void => {
+        hilog.info(DOMAIN, TAG, 'cloud sync activate state=%{public}s err=%{public}s', pg.state, pg.error);
+      };
+      try {
+        const fileSync = new cloudSync.FileSync();
+        fileSync.on('progress', onProbeActivate);
+        await HuaweiAccount.withTimeout(fileSync.start(), 15000, '云空间同步激活超时');
+        fileSync.off('progress', onProbeActivate);
+      } catch (e2) {
+        hilog.warn(DOMAIN, TAG, 'cloud sync activate failed: %{public}s', (e2 as Error).message);
+      }
+      try {
+        probeWrite();
+      } catch (e3) {
+        const msg3: string = (e3 as Error).message !== undefined ? (e3 as Error).message : '';
+        hilog.error(DOMAIN, TAG, 'cloud dir probe failed after activate: %{public}s', msg3);
+        throw new Error('华为云空间端云协同未就绪：目录不可写，请在系统「设置 -> 云空间」中关闭再打开本应用同步开关，或重启应用后重试');
+      }
     }
-    if (dirExists) {
-      this.cloudReady = true;
-      return;
-    }
+  }
+
+  /** 写华为云空间备份文件：先确保目录，写入失败且目录失效时强制重建后重试一次 */
+  private async writeCloudBackup(payload: string): Promise<string> {
+    await this.ensureCloudDir();
+    const cloudPath: string = `${CLOUD_DIR}/${BACKUP_FILE}`;
     try {
-      fs.mkdirSync(CLOUD_DIR, true);
-      this.cloudReady = true;
+      const file: fs.File = HuaweiAccount.openFileForceCreate(cloudPath);
+      fs.writeSync(file.fd, payload);
+      fs.closeSync(file);
+      return cloudPath;
     } catch (e) {
-      this.cloudReady = false;
-      hilog.error(DOMAIN, TAG, 'create cloud sync dir failed: %{public}s', (e as Error).message);
-      throw new Error('创建华为云空间同步目录失败，请检查应用云空间开关');
+      const msg: string = (e as Error).message !== undefined ? (e as Error).message : '';
+      // 目录在 ensure 后被系统清理/同步状态变化导致失效：强制重建后重试一次
+      if (msg.indexOf('No such file or directory') >= 0) {
+        hilog.warn(DOMAIN, TAG, 'cloud dir lost, rebuild and retry: %{public}s', msg);
+        await this.ensureCloudDir();
+        const file: fs.File = HuaweiAccount.openFileForceCreate(cloudPath);
+        fs.writeSync(file.fd, payload);
+        fs.closeSync(file);
+        return cloudPath;
+      }
+      throw new Error(msg.length > 0 ? msg : '写入华为云空间备份文件失败');
     }
   }
 
@@ -306,10 +418,9 @@ export class HuaweiAccount {
     for (let i = 0; i < roots.length; i++) {
       try {
         const dir: string = `${roots[i]}/${BACKUP_SUBDIR}`;
-        // 目录可能已存在：递归创建（存在不报错），避免第二次备份被 File exists 误拦
-        fs.mkdirSync(dir, true);
-        const file = fs.openSync(`${dir}/${BACKUP_FILE}`,
-          fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+        // 目录已存在时个别环境会抛 File exists，静默忽略即可
+        HuaweiAccount.mkdirIgnoreExists(dir);
+        const file: fs.File = HuaweiAccount.openFileForceCreate(`${dir}/${BACKUP_FILE}`);
         fs.writeSync(file.fd, payload);
         fs.closeSync(file);
         break;
@@ -320,24 +431,16 @@ export class HuaweiAccount {
     }
     // 2) 写入华为云空间同步目录并触发端云同步（同步到使用者自己的华为云空间）
     try {
-      await this.ensureCloudDir();
-      const cloudPath: string = `${CLOUD_DIR}/${BACKUP_FILE}`;
-      // 先判存在再写：文件尚未产生属正常态，直接走创建分支；已存在则复用覆盖
-      try {
-        fs.accessSync(cloudPath);
-      } catch (e) {
-        // 文件不存在，无需处理
-      }
-      const file = fs.openSync(cloudPath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
-      fs.writeSync(file.fd, payload);
-      fs.closeSync(file);
+      const cloudPath: string = await this.writeCloudBackup(payload);
       // 触发端云同步并等待单文件上传完成（带 120s 超时兜底，杜绝"备份中"永不结束）
       await this.triggerSyncAndWait(context, cloudPath);
-      return { ok: true, message: '已备份到你的华为云空间（lxmusic_backups/lx_data_hw.lxmc）' };
+      return { ok: true, message: '已备份到你的华为云空间（music_backups/music_data_hm.mbak）' };
     } catch (e) {
       const msg: string = (e as Error).message !== undefined ? (e as Error).message : '未知错误';
       hilog.error(DOMAIN, TAG, 'hw cloud backup failed: %{public}s', msg);
-      return { ok: false, message: `备份失败：${msg}` };
+      // 云端不可用（端云协同未就绪/开关未真正生效/同步失败）但本地镜像已写入：
+      // 降级为仅本地成功，避免备份功能整体失败导致数据丢失，同时如实提示云端未成
+      return { ok: true, message: `华为云空间暂不可用（${msg}），数据已备份到本地镜像` };
     }
   }
 
@@ -397,20 +500,32 @@ export class HuaweiAccount {
     }
     // 1) 从华为云空间同步目录恢复（el2/cloud 下的文件即云端副本的本地实体，
     //    未开同步或云端无备份时 statSync 抛错，落到本地镜像回退）
+    //    新名优先，旧名（lx_data_hw.lxmc）缺失时兼容读取历史备份
     try {
       await this.ensureCloudDir();
-      const cloudPath: string = `${CLOUD_DIR}/${BACKUP_FILE}`;
-      const size: number = fs.statSync(cloudPath).size;
-      if (size <= 0) {
-        throw new Error('华为云空间备份文件是空的');
+      const cloudCandidates: string[] = [BACKUP_FILE, LEGACY_BACKUP_FILE];
+      for (const fileName of cloudCandidates) {
+        const cloudPath: string = `${CLOUD_DIR}/${fileName}`;
+        try {
+          const size: number = fs.statSync(cloudPath).size;
+          if (size <= 0) {
+            throw new Error('华为云空间备份文件是空的');
+          }
+          const file = fs.openSync(cloudPath, fs.OpenMode.READ_ONLY);
+          const buffer: ArrayBuffer = new ArrayBuffer(size);
+          fs.readSync(file.fd, buffer);
+          fs.closeSync(file);
+          const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
+          const applied: number = applyBackupPayload(decoder.decodeToString(new Uint8Array(buffer)), context);
+          return { ok: true, message: `已从华为云空间恢复（${applied} 条数据）` };
+        } catch (e) {
+          if (fileName === LEGACY_BACKUP_FILE) {
+            throw new Error((e as Error).message ?? '读取华为云空间备份文件失败');
+          }
+          // 新名不存在（或损坏），继续尝试旧名
+        }
       }
-      const file = fs.openSync(cloudPath, fs.OpenMode.READ_ONLY);
-      const buffer: ArrayBuffer = new ArrayBuffer(size);
-      fs.readSync(file.fd, buffer);
-      fs.closeSync(file);
-      const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-      const applied: number = applyBackupPayload(decoder.decodeToString(new Uint8Array(buffer)), context);
-      return { ok: true, message: `已从华为云空间恢复（${applied} 条数据）` };
+      throw new Error('未找到华为云空间备份文件');
     } catch (e) {
       hilog.warn(DOMAIN, TAG, 'hw cloud restore failed, fallback to local mirror: %{public}s',
         (e as Error).message);
@@ -419,25 +534,28 @@ export class HuaweiAccount {
     const roots: string[] = candidateRoots(context);
     let lastError: string = '未找到备份文件';
     for (let i = 0; i < roots.length; i++) {
-      const filePath: string = `${roots[i]}/${BACKUP_SUBDIR}/${BACKUP_FILE}`;
-      try {
-        fs.accessSync(filePath);
-        const file = fs.openSync(filePath, fs.OpenMode.READ_ONLY);
-        const size: number = fs.statSync(filePath).size;
-        if (size <= 0) {
+      const mirrorCandidates: string[] = [BACKUP_FILE, LEGACY_BACKUP_FILE];
+      for (const fileName of mirrorCandidates) {
+        const filePath: string = `${roots[i]}/${BACKUP_SUBDIR}/${fileName}`;
+        try {
+          fs.accessSync(filePath);
+          const file = fs.openSync(filePath, fs.OpenMode.READ_ONLY);
+          const size: number = fs.statSync(filePath).size;
+          if (size <= 0) {
+            fs.closeSync(file);
+            lastError = '备份文件是空的';
+            continue;
+          }
+          const buffer: ArrayBuffer = new ArrayBuffer(size);
+          fs.readSync(file.fd, buffer);
           fs.closeSync(file);
-          lastError = '备份文件是空的';
-          continue;
+          const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
+          const applied: number = applyBackupPayload(decoder.decodeToString(new Uint8Array(buffer)), context);
+          return { ok: true, message: `已从本地镜像恢复（${applied} 条数据）` };
+        } catch (e) {
+          lastError = (e as Error).message;
+          hilog.error(DOMAIN, TAG, 'hw restore at %{public}s failed: %{public}s', filePath, lastError);
         }
-        const buffer: ArrayBuffer = new ArrayBuffer(size);
-        fs.readSync(file.fd, buffer);
-        fs.closeSync(file);
-        const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-        const applied: number = applyBackupPayload(decoder.decodeToString(new Uint8Array(buffer)), context);
-        return { ok: true, message: `已从本地镜像恢复（${applied} 条数据）` };
-      } catch (e) {
-        lastError = (e as Error).message;
-        hilog.error(DOMAIN, TAG, 'hw restore at %{public}s failed: %{public}s', filePath, lastError);
       }
     }
     return { ok: false, message: `恢复失败：${lastError}` };

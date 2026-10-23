@@ -15,9 +15,9 @@ import { I_CLOUD, I_PERSON, I_REFRESH, IconGlyph } from '../ui/Icons';
  *
  * 提供两条备份 / 恢复链路：
  *   1. 华为账号：登录（右上角 / 本页）后把音乐数据备份到使用者自己的华为云空间
- *      （端云文件协同，el2/cloud 目录自动同步；远端目录 lxmusic_backups/lx_data_hw.lxmc），
- *      同时写一份本地端侧镜像兜底；
- *   2. WebDAV：与安卓版 lx-music-mobile 共享同一套账号与 LX Backup 目录。
+ *      （端云文件协同，el2/cloud 目录自动同步；远端目录 music_backups/music_data_hm.mbak，
+ *      旧名 lx_data_hw.lxmc 仅恢复时兼容），同时写一份本地端侧镜像兜底；
+ *   2. WebDAV：与安卓版 lx-music-mobile 共享同一套账号与 Music Backup 目录。
  * 参与备份的数据一致：试听列表 / 收藏 / 歌单 / 不喜欢规则（由 LocalLibrary 提供）。
  */
 @Component
@@ -277,8 +277,7 @@ export struct BackupOptionsView {
         .fontColor(C_TEXT_SUB)
         .width('100%')
         .textAlign(TextAlign.Start)
-      HintText({ text: '与安卓版（lx-music-mobile）放在同一个 LX Backup 文件夹、共享同一套账号；'
-        + '账号在「我的 - 云音乐设置」里配置。' })
+      HintText({ text: '备份目录为 Music Backup，账号在「我的 - 云音乐设置」里配置。' })
 
       Row({ space: 12 }) {
         Button('立即备份')

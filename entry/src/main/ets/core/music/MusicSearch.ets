@@ -4,13 +4,13 @@ import { aes128EcbPkcs7HexUpper, md5Hex, sha1Hex, toBase64, utf8Bytes } from './
 /**
  * 内置音乐搜索（宿主侧）
  *
- * 为什么需要它：洛雪的自定义源（源规则）只负责「给定 musicInfo -> 播放链接」，
+ * 为什么需要它：上游的自定义源（源规则）只负责「给定 musicInfo -> 播放链接」，
  * 协议里没有搜索能力（见 user-api-preload.js 的 supportActions：只有 musicUrl/lyric/pic）。
- * 洛雪 App 里搜索来自内置的平台 SDK（src/utils/musicSdk/{kw,kg,tx,wy,mg}/musicSearch.js），
+ * 上游 App 里搜索来自内置的平台 SDK（src/utils/musicSdk/{kw,kg,tx,wy,mg}/musicSearch.js），
  * 所以这里把同样的搜索逻辑移植到 ArkTS，搜索出 musicInfo 后再交给导入的源规则解析播放链接。
  *
  * 已移植：酷我(kw)、酷狗(kg)、咪咕(mg)、QQ(tx)、网易(wy)。
- * 未移植：喜马拉雅(xm) —— 洛雪里整块被注释掉的死代码。
+ * 未移植：喜马拉雅(xm) —— 上游里整块被注释掉的死代码。
  *
  * ⚠️ wy 待复核：2026-09 直接请求网易 eapi 端点（搜索 /api/search/song/list/page 与
  * 歌词 /api/song/lyric/v1）都返回 code:404，本条链路很可能已经不通。
@@ -23,7 +23,7 @@ export interface LxQualityItem {
   hash?: string;
 }
 
-/** 洛雪旧版 musicInfo，与源脚本 request.info.musicInfo 结构一致 */
+/** 上游旧版 musicInfo，与源脚本 request.info.musicInfo 结构一致 */
 export interface LxMusicInfo {
   name: string;
   singer: string;
@@ -34,7 +34,7 @@ export interface LxMusicInfo {
   interval: string;
   img: string;
   /**
-   * 酷狗用 hash 取流；kw/mg/tx/wy 在洛雪里根本没有这个字段。
+   * 酷狗用 hash 取流；kw/mg/tx/wy 在上游里根本没有这个字段。
    * 源脚本普遍写 `musicInfo.hash ?? musicInfo.songmid`，所以这类平台必须「不写这个字段」，
    * 写空串会让 ?? 不回退，导致 songId 变成空串。
    */
@@ -96,7 +96,7 @@ function asRecord(v: Object | undefined): Record<string, Object> {
   return {};
 }
 
-/** 洛雪的 formatPlayTime：秒 -> mm:ss，0 显示 --/-- */
+/** 上游的 formatPlayTime：秒 -> mm:ss，0 显示 --/-- */
 export function formatPlayTime(seconds: number): string {
   const m: number = Math.trunc(seconds / 60);
   const s: number = Math.trunc(seconds % 60);
@@ -106,7 +106,7 @@ export function formatPlayTime(seconds: number): string {
   return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
 }
 
-/** 洛雪的 sizeFormate：字节 -> 可读大小 */
+/** 上游的 sizeFormate：字节 -> 可读大小 */
 export function sizeFormate(size: number): string {
   if (!size) {
     return '0 B';
@@ -147,7 +147,7 @@ function decodeEntity(entity: string): string | null {
   return null;
 }
 
-/** 洛雪的 decodeName：解 HTML 实体（等价于 he.decode 的常见子集） */
+/** 上游的 decodeName：解 HTML 实体（等价于 he.decode 的常见子集） */
 export function decodeName(str: string): string {
   if (str.length === 0) {
     return '';
@@ -173,7 +173,7 @@ export function decodeName(str: string): string {
   return out;
 }
 
-/** 洛雪的 formatSingerName：歌手数组 -> "、" 连接 */
+/** 上游的 formatSingerName：歌手数组 -> "、" 连接 */
 export function formatSingerName(singers: Object | undefined): string {
   if (Array.isArray(singers)) {
     const names: string[] = [];
@@ -249,7 +249,7 @@ export function hasQuality(info: LxMusicInfo, quality: string): boolean {
 const QUALITY_ORDER: string[] = ['flac24bit', 'flac', '320k'];
 
 /**
- * 选音质：与洛雪的 getPlayQuality 一致 —— 从期望音质往下找，
+ * 选音质：与上游的 getPlayQuality 一致 —— 从期望音质往下找，
  * 必须同时被「源脚本声明的音质」和「该曲目提供的音质」支持，否则回落 128k。
  */
 export function pickQuality(preferred: string, supported: string[], info: LxMusicInfo): string {
@@ -484,7 +484,7 @@ const MG_DEVICE_ID: string = '963B7AA0D21511ED807EE5846EC87D20';
 const MG_SIGNATURE_MD5: string = '6cdc72a439cef99a3418d2a78aa28c73';
 const MG_SIGNATURE_SALT: string = 'yyapp2d16148780a1dcc7408e06336b98cfd50';
 
-/** 咪咕接口签名：md5(关键词 + 固定串 + deviceId + 时间戳)，与洛雪 createSignature 一致 */
+/** 咪咕接口签名：md5(关键词 + 固定串 + deviceId + 时间戳)，与上游 createSignature 一致 */
 export function createMgSignature(keyword: string, time: string): string {
   return md5Hex(`${keyword}${MG_SIGNATURE_MD5}${MG_SIGNATURE_SALT}${MG_DEVICE_ID}${time}`);
 }
@@ -513,7 +513,7 @@ function mgFormatToQuality(formatType: string): string {
  * 谁也加载不出来：列表里只剩占位图，播控中心那边还会被当成一个不存在的本地文件
  * （PlaybackService 打出 "local cover missing" 后兜底成图标）。
  * 宿主是 d.musicapp.migu.cn —— 咪咕自己的绝对地址就是 `https://d.musicapp.migu.cn/data/oss/...`，
- * 洛雪 `mg/musicSearch.js` 里写的是 http 前缀，两种都实测能出图，这里跟接口保持一致用 https。
+ * 上游 `mg/musicSearch.js` 里写的是 http 前缀，两种都实测能出图，这里跟接口保持一致用 https。
  *
  * 已经是 http(s) 的地址原样返回；空串也原样返回（调用方据此判断「这首歌没有封面」）。
  */
@@ -778,7 +778,7 @@ export async function searchMusic(
   if (source === 'wy') {
     return searchWy(str, page, limit);
   }
-  // xm（喜马拉雅）在洛雪里整块是注释掉的死代码，没有可移植的实现
+  // xm（喜马拉雅）在上游里整块是注释掉的死代码，没有可移植的实现
   throw new Error(`${source} 暂无内置搜索实现（当前支持：${SEARCH_PLATFORMS.join(' / ')}）`);
 }
 
@@ -882,7 +882,7 @@ const TX_SCRAMBLE_VALUES: number[] = [
 ];
 const TX_UA: string = 'QQMusic 14090508(android 12)';
 
-/** 去掉 base64 里的 \\ / + = 四种字符（洛雪用 /[\\/+=]/g 全量替换） */
+/** 去掉 base64 里的 \\ / + = 四种字符（上游用 /[\\/+=]/g 全量替换） */
 function stripB64Chars(input: string): string {
   let out: string = '';
   for (let i = 0; i < input.length; i++) {
@@ -901,7 +901,7 @@ function padZero5(value: number): string {
 }
 
 /**
- * QQ 音乐 zzcSign，照抄洛雪 tx/utils/crypto.js。
+ * QQ 音乐 zzcSign，照抄上游 tx/utils/crypto.js。
  * 注意 PART_1_INDEXES 含越界下标 40：hash[40] 是 undefined，join('') 会变成空串。
  * 这里显式跳过越界下标，与原行为一致（原版依赖 join 对 undefined 的转换）。
  */
@@ -933,7 +933,7 @@ function createTxSearchId(): string {
   return guid.toUpperCase() + padZero5(Math.floor(Math.random() * 100000));
 }
 
-/** 构造 QQ 搜索请求体（键顺序必须与洛雪一致，因为签名是对这个 JSON 串算的） */
+/** 构造 QQ 搜索请求体（键顺序必须与上游一致，因为签名是对这个 JSON 串算的） */
 export function createTxRequestBody(keyword: string, page: number, limit: number): string {
   const comm: Record<string, Object> = {
     '_channelid': '0',
@@ -1078,11 +1078,11 @@ const WY_UA: string =
 const WY_EAPI_KEY: string = 'e82ckenh8dichen8';
 
 /**
- * 网易 eapi 参数，照抄洛雪 wy/utils/crypto.js 的 eapi()：
+ * 网易 eapi 参数，照抄上游 wy/utils/crypto.js 的 eapi()：
  *   digest = md5(`nobody${url}use${text}md5forencrypt`)
  *   data   = `${url}-36cd479b6b5-${text}-36cd479b6b5-${digest}`
  *   params = hexUpper( AES-128-ECB/PKCS7(key, data) )
- * 其中 ECB 的 mode 在洛雪里是 Java 的 "AES"（= ECB/PKCS5Padding），不是 NoPadding。
+ * 其中 ECB 的 mode 在上游里是 Java 的 "AES"（= ECB/PKCS5Padding），不是 NoPadding。
  */
 export function createEapiParams(path: string, dataJson: string): string {
   const digest: string = md5Hex(`nobody${path}use${dataJson}md5forencrypt`);
@@ -1139,7 +1139,7 @@ export function parseWySongs(resources: Object[]): LxMusicInfo[] {
     addWyExtendQuality(brLevel, item, 'jymaster', 'master', types, qualityMap);
     addWyExtendQuality(brLevel, item, 'sky', 'atmos_plus', types, qualityMap);
     addWyExtendQuality(brLevel, item, 'dolby', 'atmos', types, qualityMap);
-    // 注意：洛雪这里 switch 是「故意穿透」的，命中 999000 会同时补 320k 与 128k
+    // 注意：上游这里 switch 是「故意穿透」的，命中 999000 会同时补 320k 与 128k
     if (maxBr === 999000 || maxBr === 320000 || maxBr === 192000 || maxBr === 128000) {
       if (maxBr === 999000) {
         const size: number = asNumber(asRecord(item['sq'])['size']);

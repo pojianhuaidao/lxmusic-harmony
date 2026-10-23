@@ -4,7 +4,7 @@ import { SourceInfo, SourceMeta } from './LxTypes';
  * 源脚本头部元信息解析
  *
  * 移植自 lx-music-mobile/src/utils/data.ts 的 INFO_NAMES + matchInfo + addUserApi。
- * 洛雪要求源脚本以 `/* ... *\/` 注释块开头，块内用 `@key value` 声明元信息：
+ * 上游要求源脚本以 `/* ... *\/` 注释块开头，块内用 `@key value` 声明元信息：
  *
  *   /*!
  *    * @name 我的音源
@@ -15,7 +15,7 @@ import { SourceInfo, SourceMeta } from './LxTypes';
  *    *\/
  */
 
-/** 各字段的最大长度，与洛雪保持一致（超出会被截断并追加 ...） */
+/** 各字段的最大长度，与上游保持一致（超出会被截断并追加 ...） */
 const INFO_NAME_MAX_LENGTH: Record<string, number> = {
   'name': 24,
   'description': 36,
@@ -29,7 +29,7 @@ const HEADER_END = '*/';
 
 /** 解析脚本头部的 `@key value` */
 export function parseSourceMeta(script: string): SourceMeta {
-  // 洛雪要求注释块在脚本最开头，这里手工解析，避免依赖 RegExpMatchArray
+  // 上游要求注释块在脚本最开头，这里手工解析，避免依赖 RegExpMatchArray
   const start: number = script.indexOf(HEADER_START);
   const end: number = start >= 0 ? script.indexOf(HEADER_END, start + HEADER_START.length) : -1;
   if (start !== 0 || end < 0) {
@@ -89,7 +89,7 @@ export function parseSourceMeta(script: string): SourceMeta {
   return meta;
 }
 
-/** 生成音源 id，规则与洛雪一致：user_api_<随机3位>_<时间戳> */
+/** 生成音源 id，规则与上游一致：user_api_<随机3位>_<时间戳> */
 export function createSourceId(): string {
   return `user_api_${Math.random().toString().substring(2, 5)}_${Date.now()}`;
 }
@@ -97,7 +97,7 @@ export function createSourceId(): string {
 /**
  * 音源身份键：同一个「名字 + 版本 + 作者」视为同一个音源。
  *
- * 洛雪每次都生成新的 user_api id 并把导入的源追加进列表，同一个源导入两次就会
+ * 上游每次都生成新的 user_api id 并把导入的源追加进列表，同一个源导入两次就会
  * 出现两条一模一样的记录（截图里三份「六音音源 v1.2.1」就是这么来的）。
  * 去重时用这个键，重复导入同一份脚本就覆盖更新，而不是再堆一条。
  */
@@ -121,5 +121,5 @@ export function buildSourceInfo(script: string): SourceInfo {
   return info;
 }
 
-/** 脚本大小上限，与洛雪一致（约 9MB） */
+/** 脚本大小上限，与上游一致（约 9MB） */
 export const MAX_SCRIPT_SIZE: number = 9000000;

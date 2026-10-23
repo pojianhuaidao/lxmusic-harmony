@@ -28,6 +28,18 @@
       {
         // 后台播放：退到后台/息屏后进程要能继续跑，否则 AVPlayer 会被冻结停住
         "name": "ohos.permission.KEEP_BACKGROUND_RUNNING"
+      },
+      {
+        // 端云文件协同 / 云空间同步需要感知网络状态（对齐隔壁 legado-harmony 的
+        // 权限声明，缺失时 FileSync 在部分网络切换场景可能拿不到同步进度）
+        "name": "ohos.permission.GET_NETWORK_INFO",
+        "reason": "$string:reason_internet",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
       }
       // 这里原本还声明了 ohos.permission.FILE_ACCESS_PERSIST（持久化目录授权），已去掉：
       // 它属于「受限 ACL 权限」，必须在签名 Profile 的 allowed-acls 里声明才能生效
@@ -46,9 +58,18 @@
       //     系统返回公共 Download/<包名>/ 目录 uri（自带持久化授权），应用拼文件名建
       //     文件，无需任何静态权限声明，兼容 API 12 起的全部手机/平板。已实现于
       //     DownloadManager.openViaPicker，设置页「下载目录」显示的就是该目录。
-      //   - 应用数据根目录（LxMusicData）仍以直接读写公共 Download 目录为主、失败回退
+      //   - 应用数据根目录（MusicData）仍以直接读写公共 Download 目录为主、失败回退
       //     filesDir，见 core/common/StoragePaths.ets：写权限最终由签名 Profile 授权
       //     决定，try/catch 回退保证不因权限缺失而崩。
+    ],
+    // 模块级元数据：开启系统沉浸光感（UIMaterial）材质引擎。
+    // 对齐隔壁 legado-harmony：底部 TabBar / 标题栏的系统材质（背景模糊、光感）由
+    // 该开关驱动，缺失时 systemMaterial 在部分机型上不渲染，自绘玻璃观感也会降级。
+    "metadata": [
+      {
+        "name": "ohos.arkui.UIMaterial.state",
+        "value": "enable"
+      }
     ],
     "abilities": [
       {

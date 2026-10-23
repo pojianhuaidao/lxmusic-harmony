@@ -4,7 +4,7 @@ const DOMAIN: number = 0x0001;
 const TAG: string = 'SyncRpc';
 
 /**
- * 与洛雪 message2call 线上格式一致的极简 RPC
+ * 与上游 message2call 线上格式一致的极简 RPC
  *
  * 官方两端都用 message2call（Proxy 版）互相调用，线上报文只有三种：
  *   调用  ：{ name: "<a.b>__<随机>", path: ['a','b'], data: [参数...] }

@@ -10,6 +10,9 @@ import { CoverArt, TopFade } from '../ui/Widgets';
 import { dustBus, DustPoint, dustPointOf } from '../ui/Dust';
 import { ImportPlaylistSheet } from './ImportPlaylistSheet';
 
+/** 底部栏收展阈值：与 MineView / RecommendView 保持一致（vp） */
+const FOLD_THRESHOLD: number = 24;
+
 /**
  * 歌单页（原「听书」页签改造成）
  *
@@ -29,6 +32,39 @@ export struct SongListView {
   /** 收藏歌单那一段点开的还是**在线**歌单，路由也交给壳层（在线详情页） */
   onOpenOnline: (route: OnlineRoute) => void = () => {
   };
+  /** 壳层底部栏收起/展开回调：内容下滑（offset 增大）传 true 收起，上滑传 false 展开 */
+  onFoldChange: (folded: boolean) => void = () => {
+  };
+  /** 上次滚动偏移量 / 向下(收起)累计 / 向上(展开)累计：同方向累计超过阈值才回调一次 */
+  private foldAccumDown: number = 0;
+  private foldAccumUp: number = 0;
+
+  /**
+   * 把滚动增量上报给壳层：内容向上滚（手指上滑浏览，yOffset 为正）累计超过阈值 → 收起并排，
+   * 内容向下滚（回顶，yOffset 为负）累计超过阈值 → 展开两行。
+   *
+   * 华为文档明确 onScroll 回调的 xOffset/yOffset 是「相对上一帧的增量」而非绝对偏移，
+   * 所以这里直接消费增量即可（不要再用 lastFoldY 做差，那会把增量二次求差、永远≈0，
+   * 导致下拉/上拉都触发不了收展）。同一方向连续累计，超过 FOLD_THRESHOLD vp 才回调一次；
+   * 出现另一方向时立即清零对方累计 —— 轻微抖动、松手惯性回弹（几 vp）都不会误触。
+   */
+  private handleFoldScroll(delta: number): void {
+    if (delta > 0) {
+      this.foldAccumUp = 0;
+      this.foldAccumDown += delta;
+      if (this.foldAccumDown >= FOLD_THRESHOLD) {
+        this.foldAccumDown = 0;
+        this.onFoldChange(true);
+      }
+    } else if (delta < 0) {
+      this.foldAccumDown = 0;
+      this.foldAccumUp += -delta;
+      if (this.foldAccumUp >= FOLD_THRESHOLD) {
+        this.foldAccumUp = 0;
+        this.onFoldChange(false);
+      }
+    }
+  }
   @State playlists: PlaylistSummary[] = [];
   /** 歌单卡当前那一段：0 = 自建歌单（自己建的 + 导入的），1 = 收藏歌单（收来的在线歌单） */
   @State playlistTab: number = 0;
@@ -486,6 +522,9 @@ export struct SongListView {
         }
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
+        .onScroll((_xOffset: number, yOffset: number) => {
+          this.handleFoldScroll(yOffset);
+        })
         .layoutWeight(1)
         .align(Alignment.Top)
         .width('100%')

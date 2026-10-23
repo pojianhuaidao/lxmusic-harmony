@@ -1,5 +1,5 @@
 ﻿# ============================================================
-# lxmusic-harmony build & sign (HAP + APP dual, zip bundle)
+# 听·音乐 build & sign (HAP + APP dual, zip bundle)
 # Usage (run in project root D:\lxmusic-harmony):
 #   powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 #   powershell -ExecutionPolicy Bypass -File build_sign.ps1 -SkipBuild
@@ -7,9 +7,9 @@
 # -SkipBuild : skip build, use the newest unsigned HAP under entry\build
 #
 # Outputs (output\ folder):
-#   lxmusic_<ver>_unsigned.hap   -- unsigned HAP (侧载/自装用)
-#   lxmusic_<ver>_release.app    -- signed APP  (AGC 测试分发用，内含 signed HAP)
-#   lxmusic_<ver>_release.zip    -- 上述两个版本的封装压缩包（push 到 GitHub Release 用）
+#   music_<ver>_unsigned.hap     -- unsigned HAP (侧载/自装用)
+#   music_<ver>_release.app      -- signed APP  (AGC 测试分发用，内含 signed HAP)
+#   music_<ver>_release.zip      -- 上述两个版本的封装压缩包（push 到 GitHub Release 用）
 # ============================================================
 param(
     [switch]$Build = $true,
@@ -61,12 +61,48 @@ foreach ($f in @($p12, $cer, $p7b)) {
 }
 
 $pass = "wuxiujun13627489"
+# 签名 alias 与 key\music.p12 内的条目名强绑定；改名需重建密钥库并同步
+# .github\workflows\build-hap.yml 的 secret（LXMUSIC_KEY_B64 内为同一密钥库），
+# 品牌切割本次仅改产物名，签名链不动，故 alias 保持 lxmusic。
 $alias = "lxmusic"
 
-# ---- 2. read version ----
-$appJson = Get-Content (Join-Path $Root "AppScope\app.json5") -Raw
-$verMatch = [regex]::Match($appJson, '"versionName"\s*:\s*"([^"]+)"')
-$ver = if ($verMatch.Success) { $verMatch.Groups[1].Value } else { "unknown" }
+# ---- 2. auto-generate version (hard rule, see BUILD_RULES.md) ----
+# 唯一版本源 AppScope/app.json5：versionName = 1.MMDD.NN（MMDD=构建当日，NN=当日序号从01起），
+# versionCode = 1MMDDNN（整数），buildVersion = 1MMDDNN（字符串，与 versionCode 一致）。
+# 本脚本构建前必须自动生成并写回三处字段，禁止手动修改版本号。
+$appJsonPath = Join-Path $Root "AppScope\app.json5"
+$appJson = Get-Content $appJsonPath -Raw
+
+$mmdd = (Get-Date).ToString("MMdd")
+
+# 当日序号 NN：从 output\ 当日已存在产物（music_1.MMDD.NN_* 或 lxmusic_1.MMDD.NN_*）推断最大序号 +1，无则 01
+$maxNN = 0
+if (Test-Path $OutDir) {
+    $dayPattern = "1\.${mmdd}\.(\d{2})_"
+    Get-ChildItem $OutDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $m = [regex]::Match($_.Name, $dayPattern)
+        if ($m.Success) {
+            $n = [int]$m.Groups[1].Value
+            if ($n -gt $maxNN) { $maxNN = $n }
+        }
+    }
+}
+$nn = $maxNN + 1
+if ($nn -gt 99) { Write-Error "当日构建序号超过 99（NN=$nn），请检查 output\ 产物或等待次日再构建。" }
+$nnStr = $nn.ToString("D2")
+$verName = "1.$mmdd.$nnStr"
+$verCode = [int]("1" + $mmdd + $nnStr)
+$buildVer = ("1" + $mmdd + $nnStr)
+
+# 写回 AppScope/app.json5 三处版本字段（仅改字段值，保持文件其余内容与编码不变）
+# 注意：replacement 中捕获组必须用 ${1} 形式，$1 后接数字会被 .NET 解析为组号歧义
+$newJson = $appJson -replace '("versionCode"\s*:\s*)\d+', ('${1}' + $verCode)
+$newJson = $newJson -replace '("versionName"\s*:\s*")[^"]*(")', ('${1}' + $verName + '${2}')
+$newJson = $newJson -replace '("buildVersion"\s*:\s*")[^"]*(")', ('${1}' + $buildVer + '${2}')
+if ($newJson -eq $appJson) { Write-Error "app.json5 版本字段改写失败，请检查文件内容。" }
+[System.IO.File]::WriteAllText($appJsonPath, $newJson, (New-Object System.Text.UTF8Encoding($true)))
+$ver = $verName
+Write-Host "==> auto version: versionName=$verName / versionCode=$verCode / buildVersion=$buildVer (写入 AppScope\app.json5)"
 
 # ---- 3. 修正 DEVECO_SDK_HOME（hvigor 依赖它定位 SDK；若指向失效路径会报 00303217） ----
 $sdkCandidates = @(
@@ -116,9 +152,9 @@ Write-Host "==> signed APP  : $signedApp"
 
 # ---- 5. output paths ----
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
-$unsignedOut = Join-Path $OutDir "lxmusic_${ver}_unsigned.hap"
-$appOut      = Join-Path $OutDir "lxmusic_${ver}_release.app"
-$zipOut      = Join-Path $OutDir "lxmusic_${ver}_release.zip"
+$unsignedOut = Join-Path $OutDir "music_${ver}_unsigned.hap"
+$appOut      = Join-Path $OutDir "music_${ver}_release.app"
+$zipOut      = Join-Path $OutDir "music_${ver}_release.zip"
 
 # ---- 6. copy official artifacts (hvigor 已签好 HAP/APP，直接落盘) ----
 Copy-Item $unsignedOutHap $unsignedOut -Force
@@ -143,8 +179,8 @@ Write-Host "==> packaging zip -> $zipOut"
 $fs2 = [System.IO.File]::Open($zipOut, [System.IO.FileMode]::Create)
 $zip2 = New-Object System.IO.Compression.ZipArchive($fs2, [System.IO.Compression.ZipArchiveMode]::Create)
 try {
-    Add-ZipEntry $zip2 $unsignedOut "lxmusic_${ver}_unsigned.hap"
-    Add-ZipEntry $zip2 $appOut      "lxmusic_${ver}_release.app"
+    Add-ZipEntry $zip2 $unsignedOut "music_${ver}_unsigned.hap"
+    Add-ZipEntry $zip2 $appOut      "music_${ver}_release.app"
 } finally {
     $zip2.Dispose()
     $fs2.Dispose()
@@ -155,4 +191,4 @@ Write-Host "Done:"
 Write-Host "  unsigned HAP : $unsignedOut"
 Write-Host "  signed APP   : $appOut"
 Write-Host "  bundle zip   : $zipOut ($((Get-Item $zipOut).Length)B)"
-Write-Host "(zip 内两版本：lxmusic_${ver}_unsigned.hap 侧载用 / lxmusic_${ver}_release.app AGC 测试分发用)"
+Write-Host "(zip 内两版本：music_${ver}_unsigned.hap 侧载用 / music_${ver}_release.app AGC 测试分发用)"

@@ -42,12 +42,12 @@
 4. **文档**：`docs/LX_SOURCE_ENGINE.md` 早期写过「五个平台内置搜索全部有效」，
    对网易不成立，已在 2026-09-13 修正为待复核；本条目跟踪真正的修复。
 5. **评论**（2026-09-23 追加）：评论也只能走内置平台接口（源规则里没有「取评论」这个 action，
-   见 `docs/SONG_COMMENT.md`），网易那条用的是公开 `/api/v1/resource/comments`（不是洛雪的 weapi），
+   见 `docs/SONG_COMMENT.md`），网易那条用的是公开 `/api/v1/resource/comments`（不是上游的 weapi），
    与歌词同样属于**待实测** —— 搜索不通之前没法在设备上确认，需与本条目一起回归。
 
 ### 证据（2026-09-13 实测）
 
-请求体用洛雪的 eapi 加密方式生成（`createEapiParams`，与我们代码一致）：
+请求体用上游的 eapi 加密方式生成（`createEapiParams`，与我们代码一致）：
 `params = hexUpper(AES-128-ECB/PKCS7(key='e82ckenh8dichen8', "<url>-36cd479b6b5-<json>-36cd479b6b5-<md5>"))`
 
 | 请求 | 结果 |
@@ -55,7 +55,7 @@
 | `POST http://interface.music.163.com/eapi/batch`，摘要路径 `/api/search/song/list/page` | `code:404`（带 cookie 也是 404） |
 | `POST https://interface.music.163.com/eapi/batch`，同上 | `code:404` |
 | `POST https://interface3.music.163.com/eapi/song/lyric/v1`，body `{id,cp,tv,lv,rv,kv,yv,ytv,yrv}` | 先 `code:400`，补 `header:{os:'pc',...}` 与 cookie 后 `code:404` |
-| 同上传参，改用洛雪的加密写法（先把 payload 转 base64 再 AES，再对密文做一次 base64 解码） | 同样 `400` / `404` |
+| 同上传参，改用上游的加密写法（先把 payload 转 base64 再 AES，再对密文做一次 base64 解码） | 同样 `400` / `404` |
 
 结论：不是「缺某个参数」这么简单——**两种加密写法都被拒**，连搜索路径也是 404，
 更像是接口路径/客户端版本已经不接受这种 eapi 调用了。
@@ -147,9 +147,9 @@ $ node tools/live_list_probe.js --detail tx 3285516001
 
 `entry/src/main/ets/core/music/MusicList.ets` 的 `txPlaylistDetail`。
 
-洛雪本来有两条路（`tx/songList.js` 的 `getListDetail` 与 `getListDetail2`），
+上游本来有两条路（`tx/songList.js` 的 `getListDetail` 与 `getListDetail2`），
 但顺序是老接口优先、失败才走新版，而老接口现在是「有响应但 `code=-1`」，
-按洛雪的逻辑会重试 3 次后直接失败。本实现把顺序反过来：**新版优先、老接口兜底**，
+按上游的逻辑会重试 3 次后直接失败。本实现把顺序反过来：**新版优先、老接口兜底**，
 两条路的 songlist 共用同一个 `txFilterSongs`。
 
 ### 验收标准
@@ -257,7 +257,7 @@ hdc 截图证据见提交说明。
 
 ## 其他待办（不是缺陷，按需排期）
 
-- **歌词逐字（`lxlyric`）**：洛雪的富文本歌词（逐字时间轴）目前未使用，
+- **歌词逐字（`lxlyric`）**：上游的富文本歌词（逐字时间轴）目前未使用，
   只用了 `lyric`/`tlyric`。`lx_preload.js` 已经在回传 `lxlyric`，
   `PlatformLyric` 侧丢弃了。
 - **设计债**：`SongListPane`（「我的」与搜索结果共用的歌曲列表）仍是自绘行，

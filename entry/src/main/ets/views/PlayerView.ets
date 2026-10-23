@@ -58,7 +58,7 @@ const TRACK_ANIM_MS: number = 260;
 /**
  * 全屏播放器
  *
- * 洛雪的播放页是一张「封面 / 歌词」双页可横滑的深色页：背景是当前封面的高斯模糊，
+ * 上游的播放页是一张「封面 / 歌词」双页可横滑的深色页：背景是当前封面的高斯模糊，
  * 顶部只有下拉箭头、页码指示和分享；底部是进度条 + 播放控制 + 一排功能入口。
  */
 @Component
@@ -310,7 +310,7 @@ export struct PlayerView {
   /**
    * 换歌了就把评论页收起来
    *
-   * 洛雪遇到切歌只提示一句「这已经是「X」的评论啦」，等用户自己点刷新；
+   * 上游遇到切歌只提示一句「这已经是「X」的评论啦」，等用户自己点刷新；
    * 这里直接收起：那一层铺满整个播放器，显示的又永远是「当前这首」的评论，
    * 换歌后留着容易让人以为是新歌的评论。下次点开自然就是新歌的。
    */
@@ -444,7 +444,7 @@ export struct PlayerView {
       this.moreItem('添加到下一个播放', () => {
         this.addCurrentToQueue(true);
       })
-      // 洛雪的评论入口就在播放页的「更多」底部菜单里（Vertical/Player 的 MoreBtn），
+      // 上游的评论入口就在播放页的「更多」底部菜单里（Vertical/Player 的 MoreBtn），
       // 底部那排图标上的评论钮是同一条路的快捷入口
       this.moreItem('查看评论', () => {
         this.commentOpen = true;
@@ -725,7 +725,7 @@ export struct PlayerView {
   /**
    * 评论页
    *
-   * 洛雪是 push 一个独立 screen（`navigation.pushCommentScreen`），这里和「更多」「匹配歌词」
+   * 上游是 push 一个独立 screen（`navigation.pushCommentScreen`），这里和「更多」「匹配歌词」
    * 一样自绘一层铺满播放器的覆盖物 —— 播放器本身是系统半模态，不再往上叠系统弹层。
    * 页面内容与数据都在 views/CommentSheet.ets。
    */
@@ -1363,7 +1363,7 @@ export struct PlayerView {
 
       // ------------------------------------------------ 播放控制
       // 五个等分格：播放模式 / 上一首 / 播放 / 下一首 / 播放列表，
-      // 这样五个按钮的间距与洛雪一致，也不会贴到屏幕两边
+      // 这样五个按钮的间距与上游一致，也不会贴到屏幕两边
       Row() {
         Stack({ alignContent: Alignment.Center }) {
           IconGlyph({
@@ -1466,7 +1466,7 @@ export struct PlayerView {
         /**
          * 评论（原位是那颗没接功能的铃铛）
          *
-         * 洛雪的播放页把评论收在「更多」菜单里，横向布局才在工具栏上给一颗钮。
+         * 上游的播放页把评论收在「更多」菜单里，横向布局才在工具栏上给一颗钮。
          * 这里把它放到工具栏：一来「更多」里同样有入口，二来这颗钮原本就是个占位
          * （点不动、读屏也跳过），换成评论钮之后底部这排四个入口都是能用的。
          */
@@ -1512,24 +1512,13 @@ export struct PlayerView {
 
   build() {
     Stack({ alignContent: Alignment.Top }) {
-      // ---------------------------------------------------- 背景（封面高斯模糊 + 压暗）
+      // ---------------------------------------------------- 背景（纯色渐变，去掉封面模糊光斑层）
+      // 原先封面高斯模糊（blur 70 + opacity 0.5）会铺出大面积圆形/椭圆形光斑，随窗口形变
+      // （手机椭圆、平板圆），按需求整体移除；保留基础渐变底与压暗，播放页保持干净。
       Column()
         .width('100%')
         .height('100%')
         .linearGradient({ angle: 205, colors: [['#33333A', 0.0], ['#0C0C0E', 1.0]] })
-      if (this.cover.length > 0) {
-        Image(this.cover)
-          .width('100%')
-          .height('100%')
-          .objectFit(ImageFit.Cover)
-          .blur(70)
-          .opacity(0.5)
-          .draggable(false)
-      }
-      Column()
-        .width('100%')
-        .height('100%')
-        .backgroundColor('#40000000')
 
       // ---------------------------------------------------- 页面主体
       Column() {

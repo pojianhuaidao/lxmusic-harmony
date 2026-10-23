@@ -10,10 +10,16 @@ import { SourceBundle, SourceStore } from '../source/SourceStore';
 const DOMAIN: number = 0x0001;
 const TAG: string = 'WebDavBackup';
 
-/** 与安卓版（lx-music-mobile）同一个远端目录：LX Backup */
-export const BACKUP_DIR: string = 'LX Backup';
-/** 安卓版备份文件名是 lx_data.lxmc，鸿蒙版加 hm 后缀区分 */
-export const BACKUP_FILE: string = 'lx_data_hm.lxmc';
+/**
+ * WebDAV 备份远端目录（原名 LX Backup，与安卓版 lx-music-mobile 共用同一目录；
+ * 品牌切割后改用 Music Backup，与安卓版目录不再互通。旧备份仍留在 LX Backup 下，
+ * 如需迁移可手动在 WebDAV 服务器上把 LX Backup 内容合并到 Music Backup）。
+ */
+export const BACKUP_DIR: string = 'Music Backup';
+/** 备份文件名：品牌切割后统一为 music_data_hm.mbak（旧名 lx_data_hm.lxmc 仅恢复时兼容） */
+export const BACKUP_FILE: string = 'music_data_hm.mbak';
+/** 旧版备份文件名（品牌切割前的 lx 前缀命名），恢复时兼容读取，不再写入 */
+export const LEGACY_BACKUP_FILE: string = 'lx_data_hm.lxmc';
 /** 备份数据版本号：结构变了 +1（v2 引入可选备份范围与音源） */
 const BACKUP_VERSION: number = 2;
 const REQUEST_TIMEOUT_MS: number = 20000;
@@ -53,8 +59,8 @@ export interface WebDavBackupResult {
 /**
  * WebDAV 备份（对齐安卓版 lx-music-mobile 的 WebDAV 同步方案）
  *
- *   - 远端目录：`LX Backup`（与安卓版完全一致，同一份备份文件夹）
- *   - 文件名：`lx_data_hm.lxmc`（安卓版是 `lx_data.lxmc`，鸿蒙版加 hm 后缀区分）
+ *   - 远端目录：`Music Backup`（与安卓版完全一致，同一份备份文件夹）
+ *   - 文件名：`music_data_hm.mbak`（品牌切割后统一命名；恢复时兼容旧名 `lx_data_hm.lxmc`）
  *   - 账号：复用「WebDAV 云端音乐」的同一套配置（WebDavSettings：url / username / password）
  *
  * 只做协议：MKCOL 建目录、PUT 上传、GET 下载；数据内容由 LocalLibrary 提供
@@ -112,33 +118,39 @@ export class WebDavBackup {
     }
     try {
       const base: string = stripTrailingSlash(config.url);
-      const url: string = `${base}/${encodeURI(BACKUP_DIR)}/${encodeURI(BACKUP_FILE)}`;
-      const request = http.createHttp();
-      try {
-        const headers: Record<string, string> = WebDavClient.getInstance().authHeaders(config);
-        headers['Accept'] = '*/*';
-        const response: http.HttpResponse = await request.request(url, {
-          method: http.RequestMethod.GET,
-          header: headers,
-          connectTimeout: REQUEST_TIMEOUT_MS,
-          readTimeout: REQUEST_TIMEOUT_MS,
-        });
-        const code: number = response.responseCode;
-        if (code === 404) {
-          return { ok: false, message: `远端还没有备份（${BACKUP_DIR}/${BACKUP_FILE}），请先在鸿蒙版里备份一次` };
+      // 新名优先，旧名（lx_data_hm.lxmc）404 时兼容读取历史备份
+      const candidates: string[] = [BACKUP_FILE, LEGACY_BACKUP_FILE];
+      for (const fileName of candidates) {
+        const url: string = `${base}/${encodeURI(BACKUP_DIR)}/${encodeURI(fileName)}`;
+        const request = http.createHttp();
+        try {
+          const headers: Record<string, string> = WebDavClient.getInstance().authHeaders(config);
+          headers['Accept'] = '*/*';
+          const response: http.HttpResponse = await request.request(url, {
+            method: http.RequestMethod.GET,
+            header: headers,
+            connectTimeout: REQUEST_TIMEOUT_MS,
+            readTimeout: REQUEST_TIMEOUT_MS,
+          });
+          const code: number = response.responseCode;
+          if (code === 404) {
+            continue;
+          }
+          if (code < 200 || code >= 300) {
+            return { ok: false, message: backupErrorText(code, '恢复') };
+          }
+          const text: string = typeof response.result === 'string' ? response.result : '';
+          if (text.length === 0) {
+            return { ok: false, message: '恢复失败：备份文件是空的' };
+          }
+          const applied: number = applyBackupPayload(text, context);
+          const label: string = fileName === BACKUP_FILE ? BACKUP_FILE : `${BACKUP_FILE}（旧版 ${LEGACY_BACKUP_FILE}）`;
+          return { ok: true, message: `已从备份恢复（${applied} 条数据）` };
+        } finally {
+          request.destroy();
         }
-        if (code < 200 || code >= 300) {
-          return { ok: false, message: backupErrorText(code, '恢复') };
-        }
-        const text: string = typeof response.result === 'string' ? response.result : '';
-        if (text.length === 0) {
-          return { ok: false, message: '恢复失败：备份文件是空的' };
-        }
-        const applied: number = applyBackupPayload(text, context);
-        return { ok: true, message: `已从备份恢复（${applied} 条数据）` };
-      } finally {
-        request.destroy();
       }
+      return { ok: false, message: `远端还没有备份（${BACKUP_DIR}/${BACKUP_FILE}），请先在鸿蒙版里备份一次` };
     } catch (e) {
       hilog.error(DOMAIN, TAG, 'restore failed: %{public}s', (e as Error).message);
       return { ok: false, message: `恢复失败：${(e as Error).message}` };

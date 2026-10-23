@@ -29,7 +29,7 @@ export interface SourceBundle {
 /**
  * 音源持久化
  *
- * 对应洛雪的 utils/data.ts：
+ * 对应上游的 utils/data.ts：
  *   - userApis 列表 + 每个源的脚本体，分别存储
  *
  * 差异：HarmonyOS 的 preferences 对字符串长度有限制，而源脚本可能达到数 MB，

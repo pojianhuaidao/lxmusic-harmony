@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * 洛雪音乐自定义音源 - 纯 JS 工具库（HarmonyOS 移植版）
+ * 上游项目自定义音源 - 纯 JS 工具库（HarmonyOS 移植版）
  *
  * 对应 lx-music-mobile 原生侧通过 __lx_native_call__utils_* 暴露给沙箱的能力：
  *   md5 / base64 / buffer / aes-128-cbc / aes-128-ecb / rsa(NoPadding)
@@ -298,7 +298,7 @@
       data = dataBytes
     } else {
       // CBC_PKCS7 与 ECB_PKCS7 都要填充。
-      // 注意：洛雪的 AES_MODE.ECB_128_NoPadding 取值是 Java 的 "AES"，
+      // 注意：上游的 AES_MODE.ECB_128_NoPadding 取值是 Java 的 "AES"，
       // 即 Cipher.getInstance("AES") = AES/ECB/PKCS5Padding，所以 ECB 实际是带填充的。
       data = pkcs7Pad(dataBytes, 16)
     }

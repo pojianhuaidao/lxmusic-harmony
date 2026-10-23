@@ -9,7 +9,7 @@ const TAG: string = 'SandboxHost';
 /**
  * 注入沙箱的桥对象。
  *
- * 对应洛雪原生侧的 UserApiModule.sendAction / JsHandler：
+ * 对应上游原生侧的 UserApiModule.sendAction / JsHandler：
  * 沙箱里的 lx_preload.js 通过 lxBridge.postMessage(action, dataJson) 把
  * init / request / response / log / scriptError 回调给 ArkTS。
  *
@@ -24,7 +24,7 @@ interface LxBridgeObject {
 /**
  * 音源沙箱宿主。
  *
- * 洛雪用原生 QuickJS 跑源脚本；HarmonyOS 侧没有可直接调用的通用 JS 引擎，
+ * 上游用原生 QuickJS 跑源脚本；HarmonyOS 侧没有可直接调用的通用 JS 引擎，
  * 这里用 ArkWeb 承载同一套 preload 引擎。Web 组件必须挂在 UI 树上，
  * 因此需要页面在任意位置放置一个 SourceSandboxHost（1x1、几乎透明）。
  */

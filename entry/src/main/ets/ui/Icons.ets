@@ -52,7 +52,7 @@ export const I_BRUSH: Resource = $r('sys.symbol.paintbrush');
 export const I_THUMB_UP: Resource = $r('sys.symbol.hand_thumbsup');
 /** 更多 */
 export const I_MORE: Resource = $r('sys.symbol.more');
-/** 列表行右侧的「更多」：圆环里两个竖点（洛雪歌单行尾那个图标） */
+/** 列表行右侧的「更多」：圆环里两个竖点（上游歌单行尾那个图标） */
 export const I_MORE_CIRCLE: Resource = $r('sys.symbol.dot_grid_1x2_circle');
 /** 多选：已选中 / 未选中（本地音乐的批量移除用） */
 export const I_CHECK_CIRCLE: Resource = $r('sys.symbol.checkmark_circle_fill');
@@ -64,7 +64,7 @@ export const I_CIRCLE: Resource = $r('sys.symbol.circle');
  * 所以这里不去自绘：交给 HDS 标题栏的菜单槽位画，玻璃动效与返回键同源。
  */
 export const I_SELECT_ALL: Resource = $r('sys.symbol.checkmark_square_on_square');
-/** 批量操作：加入歌单（带加号的歌单，洛雪那套「加入歌单」的语义） */
+/** 批量操作：加入歌单（带加号的歌单，上游那套「加入歌单」的语义） */
 export const I_ADD_SONGLIST: Resource = $r('sys.symbol.add_songlist');
 /** 批量操作：从歌单里移除（带减号的歌单） */
 export const I_REMOVE_SONGLIST: Resource = $r('sys.symbol.remove_songlist');
@@ -85,7 +85,7 @@ export const I_CLOSE: Resource = $r('sys.symbol.xmark');
 /** 播放控制 */
 export const I_PLAY: Resource = $r('sys.symbol.play_fill');
 export const I_PAUSE: Resource = $r('sys.symbol.pause_fill');
-/** 播放钮（圆底，洛雪迷你播放器里用的就是这种） */
+/** 播放钮（圆底，上游迷你播放器里用的就是这种） */
 export const I_PLAY_CIRCLE: Resource = $r('sys.symbol.play_circle_fill');
 export const I_PAUSE_CIRCLE: Resource = $r('sys.symbol.pause_circle_fill');
 export const I_PREV: Resource = $r('sys.symbol.backward_end_fill');
@@ -108,7 +108,7 @@ export const I_BELL: Resource = $r('sys.symbol.bell');
 /**
  * 评论（气泡）
  *
- * 系统符号表里的 `message` 就是一个对话气泡，语义与洛雪的评论图标一致
+ * 系统符号表里的 `message` 就是一个对话气泡，语义与上游的评论图标一致
  * （名字都取自 SDK 的 ets-loader/sysResource.js，写错会静默渲染成空白）。
  */
 export const I_COMMENT: Resource = $r('sys.symbol.message');

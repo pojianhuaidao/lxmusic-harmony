@@ -1,6 +1,6 @@
-# 洛雪同步（LX Sync）鸿蒙端实现
+# 上游同步（LX Sync）鸿蒙端实现
 
-本移植版实现了洛雪音乐的**数据同步**能力：作为客户端连接官方同步服务端
+本移植版实现了上游项目的**数据同步**能力：作为客户端连接官方同步服务端
 （`lx-music-sync-server`，也就是桌面端／移动端在用的那个），完成与官方客户端一样的
 歌单、收藏、试听列表、「不喜欢的歌曲」同步。
 
@@ -39,7 +39,7 @@
 | 摘要 | MD5 | 小写 hex（服务端 `createHash('md5').digest('hex')`） |
 | 压缩 | gzip | 仅当消息长度 > 1024，加 `cg_` 前缀，body 为 base64 |
 
-> 注：洛雪移动端源码里写的 `AES_MODE.ECB_128_NoPadding` 实际取值是 Java 的字符串 `"AES"`，
+> 注：上游移动端源码里写的 `AES_MODE.ECB_128_NoPadding` 实际取值是 Java 的字符串 `"AES"`，
 > 即 `AES/ECB/PKCS5Padding`——所以是 PKCS7 而不是「无填充」。这点在客户端与服务端两侧是一致的。
 
 ### 2. 报文格式（`{name, path, data}`）
@@ -119,14 +119,14 @@
 
 - `PlaySession`：新增 `LibrarySink`，队列/收藏的本地改动通知音乐库；
   新增 `adoptLibraryState()`，服务端改动整体替换界面状态并递增 `K_LIBRARY_VERSION`。
-- 「歌单 → 我的收藏」＝ 洛雪的 `loveList`；爱心 / 行菜单可取消收藏，改动会同步
+- 「歌单 → 我的收藏」＝ 上游的 `loveList`；爱心 / 行菜单可取消收藏，改动会同步
   （收藏列表在歌单页的内置歌单里，不在「我的」页）。
-- 「歌单」＝ 洛雪的 `userList`；`+` 新建、长按重命名/删除、点击把歌单歌曲装入队列播放。
-- 「播放列表」＝ 洛雪的 `defaultList`（试听列表）；长按可收藏／加入不喜欢／移出队列。
+- 「歌单」＝ 上游的 `userList`；`+` 新建、长按重命名/删除、点击把歌单歌曲装入队列播放。
+- 「播放列表」＝ 上游的 `defaultList`（试听列表）；长按可收藏／加入不喜欢／移出队列。
 
 ### 数据映射
 
-同步用歌曲是洛雪的 `MusicInfoOnline` 形态（`id / name / singer / source / interval / meta`），
+同步用歌曲是上游的 `MusicInfoOnline` 形态（`id / name / singer / source / interval / meta`），
 而本移植版的播放链路吃的是内置 SDK 形态（`songmid / types / _types / …`，存在 `musicInfoJson` 里）。
 两者互转严格照抄官方 `src/utils/index.ts` 的 `toNewMusicInfo` / `toOldMusicInfo`，
 **包括字段书写顺序**——因为服务端的快照 key 是「列表数据 JSON 字符串的 md5」，
@@ -174,7 +174,7 @@ curl http://127.0.0.1:9527/id
    打开「启用同步」→ 首次会走认证码流程建立身份，之后改用保存的密钥。
 3. 状态应依次出现「连接中… → 已连接，正在同步… → 已连接，同步中」。
    若两端数据不同，会弹出「同步方式」选择框，选完即完成一次合并。
-4. 之后在 App 里改收藏／建歌单／加不喜欢，在另一台设备（洛雪桌面端或移动端）
+4. 之后在 App 里改收藏／建歌单／加不喜欢，在另一台设备（上游桌面端或移动端）
    连同一服务端即可看到变化；反向亦同。
 
 模拟器访问主机：DevEco 模拟器通常可用 `10.0.2.2`；不行就用主机局域网 IP。
@@ -188,7 +188,7 @@ devecocli log --level I --keyword Sync
 ```
 
 落盘数据在应用沙箱 `filesDir/lx_sync/`：`config.json`（地址/开关/设备名）、
-`keys.json`（按 serverId 的身份）、`list.json`（洛雪线上格式的列表数据）、
+`keys.json`（按 serverId 的身份）、`list.json`（上游线上格式的列表数据）、
 `dislike.json`。`list.json` 就是「会被同步出去的那份数据」，可直接查看核对。
 
 ## 四、已知限制
@@ -196,7 +196,7 @@ devecocli log --level I --keyword Sync
 - **同步方式选择框**是自绘底部面板（`bindSheet`），未做官方那种「完全覆盖」勾选框的
   两段式交互，但六种 list 方式与服务端的取值完全一致。
 - **试听列表与播放队列合并为一份数据**：本移植版没有独立的「试听列表」页，
-  沿用洛雪桌面端「试听列表就是播放队列」的含义，因此换播放队列会同步为
+  沿用上游桌面端「试听列表就是播放队列」的含义，因此换播放队列会同步为
   `list_music_overwrite('default', …)`。若以后加了独立试听列表页，应把这层映射拆开。
 - **歌单排序**（`list_update_position`）只实现接收，界面还没有拖拽排序入口。
 - **不喜欢规则**界面只支持「按歌名/歌手添加、单条删除、清空」，没有做命中后的歌曲灰显。
