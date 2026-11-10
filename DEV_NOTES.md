@@ -23,7 +23,7 @@ AIGC:
 # lxmusic-harmony 交接记录 / 开发排障笔记
 
 > 用途：换电脑直接接手本项目的唯一入口文档。把整个项目文件夹（含 key\ 签名材料）复制到新电脑后，先读本文件，按「§2 换电脑接手指引」与「§4 出包标准流程」操作即可继续。
-> 最近交接：2026-11-10，版本 1.1110.11（华为账号/AGC 已整体移除）
+> 最近交接：2026-11-10，版本 1.1110.12（华为账号/AGC 已整体移除，cloudFileSyncEnabled 已置 false）
 
 ---
 
@@ -47,17 +47,17 @@ AIGC:
 4. 出包：`powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build`（脚本自动定位 DevEco 安装路径与 SDK，自动 clean，见 §4）。
 5. 新电脑首次打开工程若提示 SDK/签名缺失，在 build-profile.json5 里核对 signingConfigs 指向 key\ 下同名材料即可。
 
-## 3. 当前产物状态（1.1110.11，2026-11-10 全量重建）
+## 3. 当前产物状态（1.1110.12，2026-11-10 全量重建）
 
 output\ 目录遵守"只保留最新版"：每次出包后清理旧版本文件，仅留当次三个产物。
 
 | 产物 | 路径 | 说明 |
 |---|---|---|
-| unsigned HAP | output\music_1.1110.11_unsigned.hap | 侧载 / 自装用 |
-| signed APP | output\music_1.1110.11_release.app（875409 B） | AGC 测试分发用（历史产物，AGC 已移除） |
-| bundle zip | output\music_1.1110.11_release.zip（1643989 B） | 上述两个的封装压缩包 |
+| unsigned HAP | output\music_1.1110.12_unsigned.hap | 侧载 / 自装用 |
+| signed APP | output\music_1.1110.12_release.app（875409 B） | AGC 测试分发用（历史产物，AGC 已移除） |
+| bundle zip | output\music_1.1110.12_release.zip（1644024 B） | 上述两个的封装压缩包 |
 
-> 1.1110.11 为移除华为账号/AGC 后的首个构建，编译通过。旧版（1.1021.01 ~ 1.1110.10 共 36 个文件）已清理。
+> 1.1110.12 在 1.1110.11 基础上将 app.json5 的 cloudFileSyncEnabled 置为 false（云空间文件协同已无使用方，华为账号移除后仅保留 WebDAV 备份），HAP 内 module.json 已验证为 False。旧版产物已随出包清理。
 
 ## 4. 出包标准流程
 
@@ -115,6 +115,11 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 - 配置层：module.json5 中 EntryAbility 的 client_id metadata（AGC 认证用）删除；rawfile\agconnect-services.json 删除（key\ 下保留 4153 B 备份，可用 TEMP 备份或 key 目录恢复）。
 - CI 层：.github/workflows/build-hap.yml 删除 "Install project dependencies (ohpm)" 步骤（该步骤原本只为让 @hw-agconnect 从 ohpm 源解析），现项目无第三方 ohpm 依赖，hvigor 可直编；YAML 已校验 15 个 step 合法。
 - entry 目录依赖为空时不会生成 oh_modules，属正常现象，勿再误判为依赖空壳。
+
+### 5.6 cloudFileSyncEnabled 关闭（2026-11-10，1.1110.12）
+
+- app.json5 的 `cloudFileSyncEnabled` 由 true 改为 false：华为账号移除后，华为云空间端云文件协同（cloudSync.FileSync + el2/cloud）已无任何调用方，备份恢复只走 WebDAV，保留开关会造成系统云空间里出现无意义同步项。
+- 构建后校验 output\music_1.1110.12_unsigned.hap 内 module.json：versionName=1.1110.12 / versionCode=1111012 / cloudFileSyncEnabled=False。
 
 ## 6. 本次自 1.1015.01 起的改动文件清单
 
