@@ -96,15 +96,8 @@
           "split",
           "floating"
         ],
-        // 华为帐号登录（AGC 认证服务 hwid）必需的 client_id 元数据：
-        // @hw-agconnect/auth 通过 Ability 的 metadata 读取 client_id，缺失会
-        // 导致 auth 实例初始化失败（Cannot read property currentUserInstance of undefined）
-        "metadata": [
-          {
-            "name": "client_id",
-            "value": "6917619028178838274"
-          }
-        ],
+        // 华为账号登录（AGC hwid client_id metadata）已随账号功能一起移除，
+        // 不再声明 client_id，也不再装 @hw-agconnect/auth。
         "exported": true,
         "skills": [
           {

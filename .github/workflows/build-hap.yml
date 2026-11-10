@@ -52,17 +52,6 @@ jobs:
           npm config set @ohos:registry=https://repo.harmonyos.com/npm/
           npm install --no-save @ohos/hvigor@latest @ohos/hvigor-ohos-plugin@latest
 
-      - name: Install project dependencies (ohpm)
-        run: |
-          set -euo pipefail
-          OHPM="$(dirname "${HOS_SDK_HOME}")/ohpm/bin/ohpm"
-          if [ ! -f "$OHPM" ]; then
-            echo "ohpm not found at $OHPM (HOS_SDK_HOME=${HOS_SDK_HOME})" >&2
-            exit 1
-          fi
-          "$OHPM" config set registry https://ohpm.openharmony.cn/ohpm/
-          "$OHPM" install
-
       - name: Auto-generate version (1.MMDD.NN) & write AppScope/app.json5
         id: version
         env:

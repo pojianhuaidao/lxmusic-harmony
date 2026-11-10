@@ -5,11 +5,9 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {
-    "@hw-agconnect/auth": "^1.1.0",
-    "@hw-agconnect/hmcore": "^1.0.6",
-    "@hw-agconnect/ohoscore": "1.1.0"
-  },
+  // 华为账号 / AGC（@hw-agconnect/auth、hmcore、ohoscore）已整体移除：
+  // 端侧签不出带授权 Profile 的包，账号登录与云端备份恢复都跑不通，不再装这三个包。
+  "dependencies": {},
   "devDependencies": {},
   "dynamicDependencies": {}
 }

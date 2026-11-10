@@ -22,8 +22,8 @@ AIGC:
 
 # lxmusic-harmony 交接记录 / 开发排障笔记
 
-> 用途：换电脑直接接手本项目的唯一入口文档。把整个项目文件夹（含 key\、agconnect-services.json）复制到新电脑后，先读本文件，按「§2 换电脑接手指引」与「§4 出包标准流程」操作即可继续。
-> 最近交接：2026-10-20，版本 1.1020.01
+> 用途：换电脑直接接手本项目的唯一入口文档。把整个项目文件夹（含 key\ 签名材料）复制到新电脑后，先读本文件，按「§2 换电脑接手指引」与「§4 出包标准流程」操作即可继续。
+> 最近交接：2026-11-10，版本 1.1110.11（华为账号/AGC 已整体移除）
 
 ---
 
@@ -35,28 +35,29 @@ AIGC:
 | GitHub | https://github.com/pojianhuaidao/lxmusic-harmony.git（账号 pojianhuaidao） |
 | 包名（硬性） | music.hm.op |
 | 当前版本 | 1.1020.01（AppScope/app.json5 三处一致：versionCode=1102001 / versionName=1.1020.01 / buildVersion=1102001，已开 cloudFileSyncEnabled=true） |
-| 签名材料 | key\music.p12、音乐.cer、音乐Release.p7b、hap-sign-tool.jar、agconnect-services.json 等（共 7 项） |
+| 签名材料 | key\music.p12、音乐.cer、音乐Release.p7b、hap-sign-tool.jar 等（共 6 项；agconnect-services.json 已随 AGC 移除，仅 key\ 下留备份） |
 | 华为账号昵称 | Xiu 伍修骏 |
 | 版本规则 | 按当天日期 MMDD 递增（1.10MMDD.0X），改 AppScope/app.json5 三处 |
 
 ## 2. 换电脑接手指引
 
-1. 拷贝整个项目文件夹（**必须包含 key\ 目录与 entry\src\main\resources\rawfile\agconnect-services.json**，签名与 AGC 配置缺一不可）。
+1. 拷贝整个项目文件夹（**必须包含 key\ 目录**，签名材料不可缺；项目已无 AGC 配置依赖）。
 2. 安装 DevEco Studio（版本与 SDK 对应：HarmonyOS SDK 26 / modelVersion 26.0.0 / API 12+），本项目原机安装在 `C:\Program Files\Huawei\DevEco Studio`。
 3. 在项目根目录执行 `npm install`（node_modules 不入库，需重装；hvigor 命令行依赖项目 node_modules 的 @ohos/hvigor-ohos-plugin）。
 4. 出包：`powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build`（脚本自动定位 DevEco 安装路径与 SDK，自动 clean，见 §4）。
 5. 新电脑首次打开工程若提示 SDK/签名缺失，在 build-profile.json5 里核对 signingConfigs 指向 key\ 下同名材料即可。
 
-## 3. 当前产物状态（1.1020.01，2026-10-20 全量重建）
+## 3. 当前产物状态（1.1110.11，2026-11-10 全量重建）
+
+output\ 目录遵守"只保留最新版"：每次出包后清理旧版本文件，仅留当次三个产物。
 
 | 产物 | 路径 | 说明 |
 |---|---|---|
-| signed APP | output\lxmusic_1.1020.01_release.app（962244 B） | AGC 测试分发用（官方签名，唯一认可格式） |
-| unsigned HAP | output\lxmusic_1.1020.01_unsigned.hap（2123821 B） | 侧载 / 自装用 |
-| bundle zip | output\lxmusic_1.1020.01_release.zip（1805539 B） | 上述两个的封装压缩包 |
+| unsigned HAP | output\music_1.1110.11_unsigned.hap | 侧载 / 自装用 |
+| signed APP | output\music_1.1110.11_release.app（875409 B） | AGC 测试分发用（历史产物，AGC 已移除） |
+| bundle zip | output\music_1.1110.11_release.zip（1643989 B） | 上述两个的封装压缩包 |
 
-> 产物构建时间 15:02，已验证 HAP 内 module.json：versionName=1.1020.01 / versionCode=1102001 / buildVersion=1102001 / cloudFileSyncEnabled=true。
-> 手机当前装有 1.1019.01 待更新。
+> 1.1110.11 为移除华为账号/AGC 后的首个构建，编译通过。旧版（1.1021.01 ~ 1.1110.10 共 36 个文件）已清理。
 
 ## 4. 出包标准流程
 
@@ -67,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 
 - `-Build` 内部已自动执行 `node hvigor.js clean` 后再 assembleApp，规避增量缓存坑（见 §5.1）。
 - 产物落在 output\，按版本号命名；`-SkipBuild` 仅用于构建已完成后跳过编译直接复制打包。
-- 版本号由脚本构建前自动生成（1.MMDD.NN，当日序号取 output\ 已有产物最大 NN +1）并写回 AppScope/app.json5 三处，**禁止手动修改版本号**；若 AGC 配置变更，同时覆盖 rawfile\agconnect-services.json。
+- 版本号由脚本构建前自动生成（1.MMDD.NN，当日序号取 output\ 已有产物最大 NN +1）并写回 AppScope/app.json5 三处，**禁止手动修改版本号**。
 - 验证产物：解包 entry\build\default\outputs\default\entry-default-unsigned.hap，读 module.json 的 versionName/versionCode/buildVersion 与 app.json5 一致。
 
 ## 5. 关键排障记录（本次重点）
@@ -89,9 +90,9 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
   ```
 
 ### 5.3 其它历史坑（简要）
-- 华为账号登录报 currentUserInstance of undefined：EntryAbility 未调 auth.init / agConnectInitialize，已修复。
+- ~~华为账号登录报 currentUserInstance of undefined~~：相关代码已随华为账号功能整体移除（见 §5.5）。
 - HDC 侧载被拒 code 9568322：release 包只能走 AGC 渠道；THREAD_BLOCK_6S 与导航条 <28vp 已修。
-- 包名残留：改包名后需全项目扫旧包名并同步 key 内 agconnect-services.json。
+- 包名残留：改包名后需全项目扫旧包名（AGC 已移除，无需再同步 agconnect-services.json）。
 - github.com 主站 443 不通时：可走 api.github.com Git Data API 构造单 commit 推送触发 Actions（见历史，新电脑一般不需要）。
 
 ### 5.4 备份"卡住不动"根因与云空间改造（2026-10-20，1.1020.01）
@@ -103,8 +104,17 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
   - 依赖用户在系统「设置 -> 云空间」中打开本应用的同步开关，备份失败提示文案已写明。
 - 构建环境要点（本机 DevEco 装在 **D:\Program Files\Huawei\DevEco Studio**，非 C 盘）：
   - 出包前需设 `DEVECO_SDK_HOME=D:\Program Files\Huawei\DevEco Studio\sdk`、`DEVECO_HOME=D:\Program Files\Huawei\DevEco Studio`、`NODE_HOME=D:\Program Files\Huawei\DevEco Studio\tools\node`、`JAVA_HOME=D:\Program Files\Huawei\DevEco Studio\jbr`，否则 hvigorw 报 node/java ENOENT。
-  - 依赖曾出现空壳：entry\oh_modules\@hw-agconnect 目录存在但内容为空 → 报 Cannot find module；在项目根跑 `ohpm.bat install` 重新填充即可。
+  - ~~依赖空壳（@hw-agconnect）~~：该依赖已删除，entry 已无第三方 ohpm 依赖，无需再跑 ohpm install。
   - build_sign.ps1 硬编码 C 盘 DevEco 路径，D 盘机器上脚本定位 app_packing_tool 失败，需手动设 env 后直接跑 hvigorw 出包并手动复制产物。
+
+### 5.5 华为账号 / AGC 依赖整体移除（2026-11-10，1.1110.11）
+
+- 背景：端侧签不出带授权 Profile 的包，华为账号登录与 AGC 云端备份在本项目不可用，相关功能已无意义。
+- 代码层：删除 HuaweiAccount.ets、HuaweiAccountSheet.ets；EntryAbility 移除 agConnectInitialize / auth.init 与 import；Index 移除账号入口；MineView 备份区改名"备份与恢复"仅留 WebDAV。
+- 依赖层：entry\oh-package.json5 的 @hw-agconnect/auth、hmcore、ohoscore 三个依赖清空；entry\oh_modules\@hw-agconnect 实体目录删除；entry/oh-package-lock.json5 同步刷新。
+- 配置层：module.json5 中 EntryAbility 的 client_id metadata（AGC 认证用）删除；rawfile\agconnect-services.json 删除（key\ 下保留 4153 B 备份，可用 TEMP 备份或 key 目录恢复）。
+- CI 层：.github/workflows/build-hap.yml 删除 "Install project dependencies (ohpm)" 步骤（该步骤原本只为让 @hw-agconnect 从 ohpm 源解析），现项目无第三方 ohpm 依赖，hvigor 可直编；YAML 已校验 15 个 step 合法。
+- entry 目录依赖为空时不会生成 oh_modules，属正常现象，勿再误判为依赖空壳。
 
 ## 6. 本次自 1.1015.01 起的改动文件清单
 
@@ -135,7 +145,7 @@ powershell -ExecutionPolicy Bypass -File build_sign.ps1 -Build
 ## 7. 待办 / 验证清单（下次接手优先做）
 
 1. **AGC 内测验证（最高优先）**：上传 output\lxmusic_1.1020.01_release.app 到 AGC 内测分发，验证：华为账号登录态、云空间备份/恢复（勾选范围 + 音源）、下载设置显示公共目录。重点验证备份数据确实进入**使用者本人华为账号的云空间**（系统云空间可见 music_backups/music_data_hm.mbak）。
-2. 若登录异常：从 AGC 控制台重导出最新 agconnect-services.json 覆盖 rawfile（解决 client_secret/api_key/code 不一致）再出包。
+2. 华为账号/AGC 已整体移除，原 AGC 内测验证项作废。
 3. AGC 复检子页面底部若仍 <28vp，补 padding。
 4. 本地未跟踪目录 `.sync_temp_dir/` 与 `图标/` 未提交，需决定忽略或入库（目前保持原状）。
 
