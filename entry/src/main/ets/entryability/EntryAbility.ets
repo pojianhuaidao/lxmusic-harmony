@@ -2,10 +2,7 @@ import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { util } from '@kit.ArkTS';
 import { window, display } from '@kit.ArkUI';
-import { initialize as agConnectInitialize, JsonTypeInfo } from '@hw-agconnect/hmcore';
-import auth from '@hw-agconnect/auth';
 import { PlaybackService } from '../core/player/PlaybackService';
 import { PlaySession } from '../core/player/PlaySession';
 import { LocalMusic } from '../core/local/LocalMusic';
@@ -51,19 +48,8 @@ export default class EntryAbility extends UIAbility {
       // 不再标记直达播放页：任何方式拉起都停留在推荐页（上架要求），
       // 需要看播放页时由用户点迷你栏 / 歌曲项进入
     }
-    // AGC 初始化：读取 rawfile 的 agconnect-services.json 并初始化核心 SDK
-    // （华为账号授权 auth.signIn 依赖此初始化；失败只记日志，不阻断应用启动）
-    try {
-      const rawFile: Uint8Array = this.context.resourceManager.getRawFileContentSync('agconnect-services.json');
-      const decoder: util.TextDecoder = new util.TextDecoder('utf-8');
-      const jsonStr: string = decoder.decodeToString(rawFile);
-      const json: JsonTypeInfo = JSON.parse(jsonStr) as JsonTypeInfo;
-      agConnectInitialize(this.context, json);
-      auth.init(this.context, jsonStr);
-      hilog.info(DOMAIN, 'testTag', 'AGC initialized');
-    } catch (e) {
-      hilog.error(DOMAIN, 'testTag', 'AGC init failed: %{public}s', (e as Error).message);
-    }
+    // 华为账号 / AGC 那条链路已整体移除（端侧拿不到授权 Profile，备份恢复跑不通），
+    // 启动阶段不再初始化 agconnect，rawfile 里的配置留档不动、无人读取。
     // 系统音乐服务（AVSession + 后台播放长时任务）要一个 Ability 的 Context，
     // 这里尽早给它（长时任务必须在应用还处于前台时申请）。
     this.safeInit('PlaybackService', () => { PlaybackService.getInstance().init(this.context); });

@@ -4,7 +4,7 @@ import { LxListDetail, LxListInfo, getBoardSongs, getPlaylistDetail, platformNam
 import { CoverStore, K_COVER_VERSION } from '../core/music/CoverStore';
 import { SyncManager } from '../core/sync/SyncManager';
 import { CollectedPlaylists, K_COLLECTED_VERSION } from '../core/sync/CollectedPlaylists';
-import { C_BG, C_DIVIDER, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB } from '../ui/Theme';
+import { C_BG, C_PLATE_EDGE, C_PLATE_FILL, C_DIVIDER, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB } from '../ui/Theme';
 import { I_CHECK_CIRCLE, I_CIRCLE, I_DOWNLOAD, I_HEART, I_HEART_FILLED,
   I_MORE_CIRCLE, I_PLAY_CIRCLE, I_VOLUME, IconGlyph } from '../ui/Icons';
 import { CoverArt, FavoriteHeart } from '../ui/Widgets';
@@ -859,6 +859,18 @@ export struct OnlineListView {
     }
     .width('100%')
     .height('100%')
+    /**
+     * 形状恒为胶囊（用户反馈第 2 条，与歌单详情 / PanePage 同款）
+     *
+     * 子页面拿不到壳层那条 HDS 悬浮胶囊（`barFloatingStyle` 是 API 26 接口，本机调用即 JsCrash），
+     * 栏体又是透明的，所以轮廓改由自绘：半高圆角 + 薄底色(c_plate_fill) + c_plate_edge 描边
+     * + 浮起阴影。底色要淡、要透但**必须看得见**；别换成 thinGlass（模糊会把列表糊成白板），
+     * 也别退回一点底都不画（用户明确说过那样「全透明就看不到了」）。
+     */
+    .borderRadius(HDS_BAR_HEIGHT / 2)
+    .backgroundColor(C_PLATE_FILL)
+    .border({ width: 1, color: C_PLATE_EDGE })
+    .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.20)', offsetX: 0, offsetY: 8 })
   }
 
   /**

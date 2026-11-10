@@ -4,35 +4,29 @@ import { K_SYNC_DATA_VERSION, SyncManager } from '../core/sync/SyncManager';
 import { BACKUP_DIR, BACKUP_FILE, WebDavBackup } from '../core/webdav/WebDavBackup';
 import { ALL_SCOPE, BackupScope } from '../core/webdav/WebDavBackup';
 import { K_WEBDAV_URL, K_WEBDAV_USER, WebDavSettings } from '../core/webdav/WebDavSettings';
-import { HuaweiAccount, K_ACCOUNT_NAME, K_ACCOUNT_UID } from '../core/account/HuaweiAccount';
 import { C_BG, C_CARD, C_FILL_SOFT, C_ICON_GREEN, C_RED, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK,
   F_ITEM, F_SECTION, F_SUB, R_CARD } from '../ui/Theme';
 import { HintText } from '../ui/SettingWidgets';
-import { I_CLOUD, I_PERSON, I_REFRESH, IconGlyph } from '../ui/Icons';
+import { I_CLOUD, I_REFRESH, IconGlyph } from '../ui/Icons';
 
 /**
  * 备份选项（由「其他设置」里的「数据」改名而来）
  *
- * 提供两条备份 / 恢复链路：
- *   1. 华为账号：登录（右上角 / 本页）后把音乐数据备份到使用者自己的华为云空间
- *      （端云文件协同，el2/cloud 目录自动同步；远端目录 music_backups/music_data_hm.mbak，
- *      旧名 lx_data_hw.lxmc 仅恢复时兼容），同时写一份本地端侧镜像兜底；
- *   2. WebDAV：与安卓版 lx-music-mobile 共享同一套账号与 Music Backup 目录。
+ * 只保留 WebDAV 一条备份 / 恢复链路：与安卓版 lx-music-mobile 共享同一套账号与
+ * Music Backup 目录（华为云空间那条链路端侧跑不通，已整体移除）。
  * 参与备份的数据一致：试听列表 / 收藏 / 歌单 / 不喜欢规则（由 LocalLibrary 提供）。
  */
 @Component
 export struct BackupOptionsView {
+  /** 平铺模式：由「我的」页把这一页的设置直接展开，不要自成滚动页 */
+  @Prop embedded: boolean = false;
   /** 内容让出标题栏那一段（壳层传来的「状态栏 + 标题栏」）：见滚动内容里的顶部占位 */
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
-  @StorageLink(K_ACCOUNT_UID) @Watch('refreshAccount') accountUid: string = '';
-  @StorageLink(K_ACCOUNT_NAME) @Watch('refreshAccount') accountName: string = '';
   @StorageLink(K_WEBDAV_URL) @Watch('refresh') webdavUrl: string = '';
   @StorageLink(K_WEBDAV_USER) @Watch('refresh') webdavUser: string = '';
   @StorageLink(K_SYNC_DATA_VERSION) @Watch('refresh') dataVersion: number = 0;
   @State summaryText: string = '';
-  @State hwStatus: string = '';
-  @State hwBusy: boolean = false;
   @State webdavStatus: string = '';
   @State webdavBusy: boolean = false;
   // 备份内容勾选（默认全选；与 WebDavBackup.BackupScope 对应）
@@ -53,13 +47,6 @@ export struct BackupOptionsView {
       `收藏 ${library.listData().loveList.length} 首 · 歌单 ${summary.playlists} 个`;
   }
 
-  private refreshAccount(): void {
-    // 登录态变化时清掉上一次的提示，避免旧文案误导
-    this.hwStatus = '';
-  }
-
-  // ------------------------------------------------------------ 华为账号
-
   /** 按下方勾选组装备份范围 */
   private buildScope(): BackupScope {
     return {
@@ -69,59 +56,6 @@ export struct BackupOptionsView {
       dislike: this.scopeDislike,
       sources: this.scopeSources,
     };
-  }
-
-  private hwBackup(): void {
-    if (this.accountUid.length === 0) {
-      this.hwStatus = '请先登录华为账号';
-      return;
-    }
-    this.hwBusy = true;
-    this.hwStatus = '正在备份到华为云空间…';
-    const context: common.Context = getContext(this) as common.Context;
-    // 整体超时兜底：底层链路（上传启动 + 任务等待）即使因 SDK 挂起永不返回，
-    // 这里也强制复位 hwBusy 并提示失败，杜绝"备份中"永远卡死
-    const timer: number = setTimeout(() => {
-      this.hwBusy = false;
-      this.hwStatus = '备份超时，请检查网络后重试';
-    }, 120000);
-    HuaweiAccount.getInstance().backup(context, this.buildScope()).then((result) => {
-      clearTimeout(timer);
-      this.hwStatus = result.message;
-      this.hwBusy = false;
-    }).catch((e: Error) => {
-      clearTimeout(timer);
-      this.hwStatus = `备份失败：${e.message}`;
-      this.hwBusy = false;
-    });
-  }
-
-  private hwRestore(): void {
-    if (this.accountUid.length === 0) {
-      this.hwStatus = '请先登录华为账号';
-      return;
-    }
-    this.hwBusy = true;
-    this.hwStatus = '正在从华为云空间恢复…';
-    const context: common.Context = getContext(this) as common.Context;
-    // 整体超时兜底：同 hwBackup，防止恢复链路挂起导致"恢复中"永远卡死
-    const timer: number = setTimeout(() => {
-      this.hwBusy = false;
-      this.hwStatus = '恢复超时，请检查网络后重试';
-    }, 120000);
-    HuaweiAccount.getInstance().restore(context).then((result) => {
-      clearTimeout(timer);
-      this.hwStatus = result.message;
-      if (result.ok) {
-        SyncManager.getInstance().bumpDataVersion();
-        this.refresh();
-      }
-      this.hwBusy = false;
-    }).catch((e: Error) => {
-      clearTimeout(timer);
-      this.hwStatus = `恢复失败：${e.message}`;
-      this.hwBusy = false;
-    });
   }
 
   // ------------------------------------------------------------ WebDAV
@@ -197,73 +131,6 @@ export struct BackupOptionsView {
     .width('100%')
   }
 
-
-  /** 华为账号卡：登录态 + 备份 / 恢复操作 */
-  @Builder
-  huaweiCard() {
-    Column({ space: 12 }) {
-      this.cardTitle(I_PERSON, '华为账号', this.accountUid.length > 0 ? '已登录' : '未登录',
-        this.accountUid.length > 0 ? C_ICON_GREEN : C_RED)
-
-      if (this.accountUid.length > 0) {
-        Text(`账号：${this.accountName.length > 0 ? this.accountName : '华为账号'}（${this.accountUid}）`)
-          .fontSize(F_SUB)
-          .fontColor(C_TEXT_SUB)
-          .width('100%')
-          .textAlign(TextAlign.Start)
-        HintText({ text: '登录后按下方勾选，把试听列表 / 收藏 / 歌单 / 不喜欢规则 / 音源备份到你的华为云空间'
-          + '，或随时恢复回来。请在系统「设置 - 云空间」打开本应用的同步开关，备份会自动同步到你的云空间；未开同步时会回退读取本地端侧镜像。' })
-        Row({ space: 12 }) {
-          Button('备份到华为云空间')
-            .fontSize(F_ITEM)
-            .height(40)
-            .layoutWeight(1)
-            .backgroundColor(C_RED)
-            .enabled(!this.hwBusy)
-            .onClick(() => {
-              this.hwBackup();
-            })
-          Button('从华为云空间恢复')
-            .fontSize(F_ITEM)
-            .height(40)
-            .layoutWeight(1)
-            .backgroundColor(C_FILL_SOFT)
-            .fontColor(C_TEXT)
-            .enabled(!this.hwBusy)
-            .onClick(() => {
-              this.hwRestore();
-            })
-        }
-        .width('100%')
-
-        Text('退出登录')
-          .fontSize(F_SUB)
-          .fontColor(C_RED)
-          .width('100%')
-          .textAlign(TextAlign.End)
-          .onClick(() => {
-            HuaweiAccount.getInstance().logout();
-            this.hwStatus = '';
-          })
-      } else {
-        HintText({ text: '登录华为账号后，可把音乐数据备份到你的华为云空间，或随时恢复回来。' })
-        HintText({ text: '登录入口在「我的」页右上角。' })
-      }
-
-      if (this.hwStatus.length > 0) {
-        Text(this.hwStatus)
-          .fontSize(F_SUB)
-          .fontColor(this.hwStatus.startsWith('已') ? C_ICON_GREEN : C_TEXT_SUB)
-          .width('100%')
-          .textAlign(TextAlign.Start)
-      }
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .padding(14)
-    .borderRadius(R_CARD)
-    .backgroundColor(C_CARD)
-  }
 
   /** WebDAV 备份卡：沿用原「数据」里那套 WebDAV 备份能力 */
   @Builder
@@ -376,24 +243,40 @@ export struct BackupOptionsView {
   }
 
   build() {
-    Column() {
-      Scroll() {
-        Column({ space: 14 }) {
-          Column().height(this.topInset + 6).width('100%')
-          this.huaweiCard()
-          this.webdavCard()
-          this.contentCard()
+    if (this.embedded) {
+      // 平铺模式（「我的」页把每一页设置摊开）：不要自己的滚动与顶部避让，高度随内容长，
+      // 滚动交给外层页面；左右留边也由外层统一给，免得两侧叠成双重内边距。
+      this.body()
+    } else {
+      Column() {
+        Scroll() {
+          this.body()
         }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 8, bottom: this.bottomInset + 16 })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .align(Alignment.Top)
       }
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(C_BG)
+    }
+  }
+
+  /** 页面主体（独立页 / 「我的」页平铺共用）：embedded 时不留顶部与左右留边 */
+  @Builder
+  body() {
+    Column({ space: 14 }) {
+      Column().height(this.embedded ? 0 : this.topInset + 6).width('100%')
+      this.webdavCard()
+      this.contentCard()
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(C_BG)
+    .padding({
+      left: this.embedded ? 0 : 16,
+      right: this.embedded ? 0 : 16,
+      top: this.embedded ? 0 : 8,
+      bottom: this.embedded ? 6 : this.bottomInset + 16,
+    })
   }
 }

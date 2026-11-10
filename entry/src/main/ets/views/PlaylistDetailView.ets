@@ -2,7 +2,7 @@ import { LengthMetrics } from '@kit.ArkUI';
 import { K_CURRENT_ID, K_LIBRARY_VERSION, PlaySession, PlaylistSummary, SongItem } from '../core/player/PlaySession';
 import { CoverStore, K_COVER_VERSION } from '../core/music/CoverStore';
 import { K_SYNC_DATA_VERSION, SyncManager } from '../core/sync/SyncManager';
-import { C_BG, C_DIVIDER, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB } from '../ui/Theme';
+import { C_BG, C_PLATE_EDGE, C_PLATE_FILL, C_DIVIDER, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB } from '../ui/Theme';
 import { I_CHECK_CIRCLE, I_CIRCLE, I_DOWNLOAD, I_MORE_CIRCLE, I_PLAY_CIRCLE, I_VOLUME, IconGlyph } from '../ui/Icons';
 import { CoverArt, EmptyState, FavoriteHeart } from '../ui/Widgets';
 import { allSelectedOf, favoriteSongs, pruneSelected, queueSongs, selectActionsOf, SelectAction, selectedSongs,
@@ -163,6 +163,20 @@ export struct PlaylistDetailView {
     }
     .width('100%')
     .height('100%')
+    /**
+     * 形状恒为胶囊（用户反馈第 2 条）
+     *
+     * 子页面没有壳层那条 HDS 悬浮胶囊可用（`barFloatingStyle` 是 API 26 接口，
+     * 本机调用即 JsCrash），栏体又被设成透明，于是这条迷你栏原来只剩「浮着的图标」，
+     * 形状读不出来。这里把轮廓改由自绘承担：半高圆角 + 薄底色(c_plate_fill) +
+     * c_plate_edge 描边 + 浮起阴影，与壳层页签栏/常驻迷你条同一套口径。
+     * 底色要淡、要透但**必须看得见**；千万别换成 thinGlass（模糊会把列表糊成白板，
+     * 也别退回一点底都不画，用户明确说过那样「全透明就看不到了」）。
+     */
+    .borderRadius(HDS_BAR_HEIGHT / 2)
+    .backgroundColor(C_PLATE_FILL)
+    .border({ width: 1, color: C_PLATE_EDGE })
+    .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.20)', offsetX: 0, offsetY: 8 })
   }
 
   /**

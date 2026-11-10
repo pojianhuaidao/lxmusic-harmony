@@ -5,12 +5,11 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SourceEngine } from '../core/source/SourceEngine';
 import { MAX_SCRIPT_SIZE } from '../core/source/LxMetadata';
-import { ImportResolveTestResult, SourceInfo, SourceLog } from '../core/source/LxTypes';
-import { DEFAULT_MUSIC_INFO_JSON, formatTestResult, runOfflineSelfTest } from '../core/source/SourceTest';
+import { SourceInfo } from '../core/source/LxTypes';
 import { HdsListItemCard, IconSize, PrefixIcon, SuffixArrow, SuffixText } from '@kit.UIDesignKit';
-import { I_CLOCK, I_DISC, I_IMPORT, I_INFO, IconGlyph } from '../ui/Icons';
+import { I_DISC, I_IMPORT, IconGlyph } from '../ui/Icons';
 import { SEARCH_PLATFORMS, isSearchSupported } from '../core/music/MusicSearch';
-import { C_BG, C_CARD, C_CHEVRON, C_DIVIDER, C_FILL_SOFT, C_FILL_SOFT_STRONG, C_ICON_GREEN, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_SECTION, F_SUB, R_CARD } from '../ui/Theme';
+import { C_BG, C_CARD, C_CHEVRON, C_DIVIDER, C_FILL_SOFT, C_FILL_SOFT_STRONG, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_SECTION, F_SUB, R_CARD } from '../ui/Theme';
 import { HintText } from '../ui/SettingWidgets';
 
 const DOMAIN: number = 0x0001;
@@ -29,13 +28,14 @@ const PLATFORM_NAMES: Record<string, string> = {
  * 音源设置
  *
  * 上游的「设置 - 音源设置」就是这一页：导入音源、启用/删除已导入的音源、
- * 查看音源声明的平台能力。这里把原先调试页的能力完整保留下来：
- * 导入 -> 加载 -> 声明平台 -> 沙箱环境兼容模式 -> 引擎日志 -> 离线自检。
+ * 导入 -> 加载 -> 查看已导入音源。（沙箱环境切换、离线自检、引擎日志三块调试信息已移除）
  *
  * 导入有两条入口：粘贴链接/正文（在线拉取），或从文件导入本地脚本（见 pickSourceFile）。
  */
 @Component
 export struct SourceSettingsView {
+  /** 平铺模式：由「我的」页把这一页的设置直接展开，不要自成滚动页 */
+  @Prop embedded: boolean = false;
   /** 内容让出标题栏那一段（壳层传来的「状态栏 + 标题栏」）：见滚动内容里的顶部占位 */
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
@@ -46,27 +46,9 @@ export struct SourceSettingsView {
   @State busy: boolean = false;
   @State sources: SourceInfo[] = [];
   @State loadedId: string = '';
-  @State supportedText: string = '-';
-  @State sandboxEnv: string = 'mobile';
-  @State logs: string[] = [];
-  @State testUrl: string = '';
-  private logListener: ((log: SourceLog) => void) | null = null;
 
   aboutToAppear(): void {
-    const engine = SourceEngine.getInstance();
-    this.sandboxEnv = engine.getSandboxEnv();
     this.refreshSources();
-    this.logListener = (log: SourceLog) => {
-      const time: string = new Date(log.time).toLocaleTimeString();
-      const next: string[] = this.logs.slice();
-      next.push(`[${time}][${log.type}] ${log.message}`);
-      this.logs = next.slice(-60);
-    };
-    engine.setLogListener(this.logListener);
-  }
-
-  aboutToDisappear(): void {
-    SourceEngine.getInstance().setLogListener(null);
   }
 
   private getContext(): common.Context {
@@ -77,8 +59,6 @@ export struct SourceSettingsView {
     const engine = SourceEngine.getInstance();
     this.sources = engine.listSources();
     this.loadedId = engine.getLoadedSourceId();
-    const supported: string[] = Object.keys(engine.getSupportedSources());
-    this.supportedText = supported.length > 0 ? supported.map((p: string) => this.platformName(p)).join(' / ') : '-';
   }
 
   private platformName(id: string): string {
@@ -155,32 +135,6 @@ export struct SourceSettingsView {
     this.refreshSources();
   }
 
-  private toggleSandboxEnv(): void {
-    const engine = SourceEngine.getInstance();
-    const next: string = engine.getSandboxEnv() === 'mobile' ? 'desktop' : 'mobile';
-    engine.setSandboxEnv(next);
-    this.sandboxEnv = next;
-    this.status = `已把沙箱环境切换为 ${next}，请重新点「加载」`;
-  }
-
-  private async runSelfTest(): Promise<void> {
-    if (this.busy) {
-      return;
-    }
-    this.busy = true;
-    this.status = '离线自检中…';
-    try {
-      const result: ImportResolveTestResult = await runOfflineSelfTest(this.getContext(), DEFAULT_MUSIC_INFO_JSON);
-      this.status = result.ok ? '离线自检通过' : '离线自检失败';
-      this.testUrl = result.resolve !== null ? result.resolve.url : '';
-      this.logs = formatTestResult(result).split('\n');
-    } catch (e) {
-      this.status = `离线自检异常: ${(e as Error).message}`;
-    } finally {
-      this.busy = false;
-    }
-  }
-
   /** 图标 + 文字平铺的卡片标题行（与「播放设置」等设置页统一观感） */
   @Builder
   cardTitle(icon: Resource, title: string, trailing: string) {
@@ -211,232 +165,165 @@ export struct SourceSettingsView {
   }
 
   build() {
-    Column() {
-      // 标题栏与返回键由 HdsNavDestination 提供，这里不再自绘头部
-      Scroll() {
-        Column({ space: 16 }) {
-          // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
-          // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
-          Column().height(this.topInset + 6).width('100%')
-          Text(this.status)
-            .fontSize(F_SUB)
-            .fontColor(C_TEXT_SUB)
-            .width('100%')
-            .textAlign(TextAlign.Start)
-            .padding({ left: 4 })
-
-          // ------------------------------------------------ 导入音源
-          Column({ space: 10 }) {
-            this.cardTitle(I_IMPORT, '导入音源', '')
-            TextArea({
-              text: this.sourceInput,
-              placeholder: '粘贴音源脚本链接，例如 https://example.com/lx-source.js',
-            })
-              .height(72)
-              .width('100%')
-              .fontSize(12.5)
-              .backgroundColor(C_FILL_SOFT)
-              .borderRadius(10)
-              .onChange((value: string) => {
-                this.sourceInput = value;
-              })
-            Row({ space: 10 }) {
-              Button(this.busy ? '处理中…' : '导入并加载')
-                .fontSize(14)
-                .height(40)
-                .layoutWeight(1)
-                .backgroundColor(C_RED)
-                .enabled(!this.busy)
-                .onClick(() => {
-                  this.importAndLoad();
-                })
-              Button('导入音源文件')
-                .fontSize(14)
-                .height(40)
-                .layoutWeight(1)
-                .backgroundColor(C_FILL_SOFT_STRONG)
-                .fontColor(C_TEXT)
-                .enabled(!this.busy)
-                .onClick(() => {
-                  this.pickSourceFile();
-                })
-            }
-            .width('100%')
-          }
-          .width('100%')
-          .padding(14)
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-          HintText({ text: '粘贴音源脚本链接（在线拉取）或脚本正文，也可从本地文件导入；导入成功后自动加载。' })
-
-          // ------------------------------------------------ 已导入音源
-          Column({ space: 10 }) {
-            this.cardTitle(I_DISC, '已导入音源', this.sources.length > 0 ? `${this.sources.length} 个` : '')
-            if (this.sources.length === 0) {
-              Column() {
-                Text('还没有导入任何音源')
-                  .fontSize(F_SUB)
-                  .fontColor(C_TEXT_WEAK)
-              }
-              .width('100%')
-              .padding(14)
-              .borderRadius(R_CARD)
-              .backgroundColor(C_CARD)
-            }
-            ForEach(this.sources, (item: SourceInfo) => {
-              Column({ space: 8 }) {
-                // 一条音源就是一张 HDS 列表卡：官方符号图标 + 名称/版本，
-                // 点卡片即加载；右侧「已就绪」用 HDS 的 SuffixText。
-                // 白卡底由外层自绘容器给（HdsListItemCard 的 cardWidth/cardBackgroundColor
-                // 会破坏它内部的宽度测量，导致整行文字消失，别用）。
-                Column() {
-                  HdsListItemCard({
-                    prefixItem: new PrefixIcon({
-                      iconSize: IconSize.SYSTEM_ICON,
-                      iconValue: { symbol: I_DISC },
-                    }),
-                    textItem: {
-                      primaryText: { text: item.name },
-                      secondaryText: {
-                        text: `${this.versionText(item.version)}　${item.author.length > 0 ? item.author : '未知作者'}`,
-                      },
-                    },
-                    suffixItem: this.loadedId === item.id
-                      ? new SuffixText({ text: '已就绪' })
-                      : new SuffixArrow({ color: C_CHEVRON }),
-                    cardHeight: 68,
-                    onClick: () => {
-                      this.loadSource(item.id);
-                    },
-                  })
-                }
-                .width('100%')
-                .borderRadius(R_CARD)
-                .backgroundColor(C_CARD)
-                .clip(true)
-
-                Row({ space: 10 }) {
-                  Button('加载')
-                    .fontSize(13)
-                    .height(34)
-                    .layoutWeight(1)
-                    .backgroundColor(C_FILL_SOFT_STRONG)
-                    .fontColor(C_TEXT)
-                    .onClick(() => {
-                      this.loadSource(item.id);
-                    })
-                  Button('删除')
-                    .fontSize(13)
-                    .height(34)
-                    .layoutWeight(1)
-                    .backgroundColor(C_RED_TINT)
-                    .fontColor(C_RED)
-                    .onClick(() => {
-                      this.removeSource(item.id);
-                    })
-                }
-                .width('100%')
-              }
-              .width('100%')
-            }, (item: SourceInfo) => item.id)
-          }
-          .width('100%')
-
-          // ------------------------------------------------ 运行状态
-          Column({ space: 10 }) {
-            this.cardTitle(I_INFO, '运行状态', '')
-            this.infoLine('已声明平台', this.supportedText)
-            Divider().strokeWidth(0.6).color(C_DIVIDER)
-            this.infoLine('沙箱环境', `lx.env = ${this.sandboxEnv}`)
-            Divider().strokeWidth(0.6).color(C_DIVIDER)
-            Row({ space: 10 }) {
-              Button('切换兼容模式')
-                .fontSize(13)
-                .height(36)
-                .layoutWeight(1)
-                .backgroundColor(C_FILL_SOFT_STRONG)
-                .fontColor(C_TEXT)
-                .onClick(() => {
-                  this.toggleSandboxEnv();
-                })
-              Button(this.busy ? '自检中…' : '一键离线自检')
-                .fontSize(13)
-                .height(36)
-                .layoutWeight(1)
-                .backgroundColor(C_FILL_SOFT_STRONG)
-                .fontColor(C_TEXT)
-                .enabled(!this.busy)
-                .onClick(() => {
-                  this.runSelfTest();
-                })
-            }
-            .width('100%')
-            if (this.testUrl.length > 0) {
-              Text(this.testUrl)
-                .fontSize(11.5)
-                .fontColor(C_ICON_GREEN)
-                .width('100%')
-                .textAlign(TextAlign.Start)
-                .copyOption(CopyOptions.LocalDevice)
-            }
-          }
-          .width('100%')
-          .padding(14)
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-          HintText({ text: '兼容模式在移动端 / 桌面端沙箱之间切换；离线自检用于排查导入的脚本能否正常解析。' })
-
-          // ------------------------------------------------ 引擎日志
-          Column({ space: 3 }) {
-            this.cardTitle(I_CLOCK, '引擎日志', this.logs.length > 0 ? `${this.logs.length} 条` : '')
-            if (this.logs.length === 0) {
-              Text('暂无日志')
-                .fontSize(11.5)
-                .fontColor(C_TEXT_WEAK)
-            }
-            ForEach(this.logs, (line: string, i: number) => {
-              Text(line)
-                .fontSize(11)
-                .fontColor(C_TEXT_SUB)
-                .width('100%')
-                .textAlign(TextAlign.Start)
-                .copyOption(CopyOptions.LocalDevice)
-            }, (line: string, i: number) => `${i}_${line}`)
-          }
-          .width('100%')
-          .padding(14)
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-
+    if (this.embedded) {
+      // 平铺模式（「我的」页把每一页设置摊开）：不要自己的滚动与顶部避让，高度随内容长，
+      // 滚动交给外层页面；左右留边也由外层统一给，免得两侧叠成双重内边距。
+      this.body()
+    } else {
+      Column() {
+        Scroll() {
+          this.body()
         }
-        .width('100%')
-        .padding({ left: 16, right: 16, bottom: this.bottomInset + 20 })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .align(Alignment.Top)
       }
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(C_BG)
     }
-    .width('100%')
-    .height('100%')
-    .backgroundColor(C_BG)
   }
 
+  /** 页面主体（独立页 / 「我的」页平铺共用）：embedded 时不留顶部与左右留边 */
   @Builder
-  infoLine(label: string, value: string) {
-    Row() {
-      Text(label)
-        .fontSize(14)
+  body() {
+    Column({ space: 16 }) {
+      // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
+      // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
+      Column().height(this.embedded ? 0 : this.topInset + 6).width('100%')
+      Text(this.status)
+        .fontSize(F_SUB)
         .fontColor(C_TEXT_SUB)
-      Blank()
-      Text(value)
-        .fontSize(14)
-        .fontColor(C_TEXT)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        .textAlign(TextAlign.Start)
+        .padding({ left: 4 })
+
+      // ------------------------------------------------ 导入音源
+      Column({ space: 10 }) {
+        this.cardTitle(I_IMPORT, '导入音源', '')
+        TextArea({
+          text: this.sourceInput,
+          placeholder: '粘贴音源脚本链接，例如 https://example.com/lx-source.js',
+        })
+          .height(72)
+          .width('100%')
+          .fontSize(12.5)
+          .backgroundColor(C_FILL_SOFT)
+          .borderRadius(10)
+          .onChange((value: string) => {
+            this.sourceInput = value;
+          })
+        Row({ space: 10 }) {
+          Button(this.busy ? '处理中…' : '导入并加载')
+            .fontSize(14)
+            .height(40)
+            .layoutWeight(1)
+            .backgroundColor(C_RED)
+            .enabled(!this.busy)
+            .onClick(() => {
+              this.importAndLoad();
+            })
+          Button('导入音源文件')
+            .fontSize(14)
+            .height(40)
+            .layoutWeight(1)
+            .backgroundColor(C_FILL_SOFT_STRONG)
+            .fontColor(C_TEXT)
+            .enabled(!this.busy)
+            .onClick(() => {
+              this.pickSourceFile();
+            })
+        }
+        .width('100%')
+      }
+      .width('100%')
+      .padding(14)
+      .borderRadius(R_CARD)
+      .backgroundColor(C_CARD)
+      HintText({ text: '粘贴音源脚本链接（在线拉取）或脚本正文，也可从本地文件导入；导入成功后自动加载。' })
+
+      // ------------------------------------------------ 已导入音源
+      Column({ space: 10 }) {
+        this.cardTitle(I_DISC, '已导入音源', this.sources.length > 0 ? `${this.sources.length} 个` : '')
+        if (this.sources.length === 0) {
+          Column() {
+            Text('还没有导入任何音源')
+              .fontSize(F_SUB)
+              .fontColor(C_TEXT_WEAK)
+          }
+          .width('100%')
+          .padding(14)
+          .borderRadius(R_CARD)
+          .backgroundColor(C_CARD)
+        }
+        ForEach(this.sources, (item: SourceInfo) => {
+          Column({ space: 8 }) {
+            // 一条音源就是一张 HDS 列表卡：官方符号图标 + 名称/版本，
+            // 点卡片即加载；右侧「已就绪」用 HDS 的 SuffixText。
+            // 白卡底由外层自绘容器给（HdsListItemCard 的 cardWidth/cardBackgroundColor
+            // 会破坏它内部的宽度测量，导致整行文字消失，别用）。
+            Column() {
+              HdsListItemCard({
+                prefixItem: new PrefixIcon({
+                  iconSize: IconSize.SYSTEM_ICON,
+                  iconValue: { symbol: I_DISC },
+                }),
+                textItem: {
+                  primaryText: { text: item.name },
+                  secondaryText: {
+                    text: `${this.versionText(item.version)}　${item.author.length > 0 ? item.author : '未知作者'}`,
+                  },
+                },
+                suffixItem: this.loadedId === item.id
+                  ? new SuffixText({ text: '已就绪' })
+                  : new SuffixArrow({ color: C_CHEVRON }),
+                cardHeight: 68,
+                onClick: () => {
+                  this.loadSource(item.id);
+                },
+              })
+            }
+            .width('100%')
+            .borderRadius(R_CARD)
+            .backgroundColor(C_CARD)
+            .clip(true)
+
+            Row({ space: 10 }) {
+              Button('加载')
+                .fontSize(13)
+                .height(34)
+                .layoutWeight(1)
+                .backgroundColor(C_FILL_SOFT_STRONG)
+                .fontColor(C_TEXT)
+                .onClick(() => {
+                  this.loadSource(item.id);
+                })
+              Button('删除')
+                .fontSize(13)
+                .height(34)
+                .layoutWeight(1)
+                .backgroundColor(C_RED_TINT)
+                .fontColor(C_RED)
+                .onClick(() => {
+                  this.removeSource(item.id);
+                })
+            }
+            .width('100%')
+          }
+          .width('100%')
+        }, (item: SourceInfo) => item.id)
+      }
+      .width('100%')
+
     }
     .width('100%')
-    .padding({ top: 3, bottom: 3 })
+    .padding({
+      left: this.embedded ? 0 : 16,
+      right: this.embedded ? 0 : 16,
+      top: this.embedded ? 0 : 0,
+      bottom: this.embedded ? 6 : this.bottomInset + 20,
+    })
   }
 
   // ------------------------------------------------------------ 从文件导入

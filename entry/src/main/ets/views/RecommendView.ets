@@ -1,6 +1,7 @@
 import { LIST_PLATFORMS, LxBoardItem, LxPlaylistItem, LxSortItem, OnlineRoute, getBoards, getRecommendPlaylists, platformName, sortListOf } from '../core/music/MusicList';
-import { C_BG, C_CHEVRON, C_RED, C_RED_TINT, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB } from '../ui/Theme';
-import { I_CHEVRON_DOWN, I_CHEVRON_RIGHT, I_MIC, I_PLAY, IconGlyph } from '../ui/Icons';
+import { C_BG, C_CHEVRON, C_ON_ACCENT, C_RED, C_RED_TINT, C_SEG_BG, C_TEXT, C_TEXT_SUB, C_TEXT_WEAK,
+  F_ITEM, F_SUB } from '../ui/Theme';
+import { I_CHEVRON_DOWN, I_CHEVRON_RIGHT, I_MIC, IconGlyph } from '../ui/Icons';
 import { CoverArt, SectionTitle, TopFade } from '../ui/Widgets';
 import { HdsFlowLightBackground } from '../ui/Hds';
 import { immersiveMaterialFor, thinGlass } from '../ui/Glass';
@@ -9,100 +10,71 @@ import { K_FLOW_LIGHT, K_MATERIAL_LEVEL } from '../core/settings/AppearanceSetti
 /** 底部栏收起/展开触发阈值（vp）：同方向累计滚动超过它才切换状态 */
 const FOLD_THRESHOLD: number = 24;
 
-/** 在线排行榜卡片 */
+/**
+ * 顶部平台按钮（页内一排五个）
+ *
+ * 顺序按用户口径：TX / KW / KG / MG / WY —— 一个按钮对应一个平台的网页歌单页，
+ * 点哪个就按那个平台的推荐歌单口径重拉一遍，和「隔壁多媒体」的音乐页是同一套用法。
+ */
+const R_TAB_SOURCES: string[] = ['tx', 'kw', 'kg', 'mg', 'wy'];
+const R_TAB_LABELS: string[] = ['TX', 'KW', 'KG', 'MG', 'WY'];
+
+/** 在线排行榜卡片（紧凑版：边长 64vp，约「两个图标」的量级，五字榜名两行放得下） */
 @Component
 struct RankCard {
   @Prop title: string = '';
-  @Prop subtitle: string = '';
   @Prop platform: string = '';
   @Prop colorA: string = '#7B6CF6';
   @Prop colorB: string = '#4E3FD6';
-  @Prop cardWidth: number = 228;
-  @Prop cardHeight: number = 268;
   onTap: () => void = () => {
   };
 
   build() {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // 渐变底：小卡片不再叠压暗层，靠圆角 + 白字保持辨识度
       Column()
         .width('100%')
         .height('100%')
         .linearGradient({ angle: 160, colors: [[this.colorA, 0.0], [this.colorB, 1.0]] })
-      // 底部压暗，让文字和播放钮跳出来
-      Column()
-        .width('100%')
-        .height('58%')
-        .linearGradient({ angle: 0, colors: [['#00000000', 0.0], ['#66000000', 1.0]] })
 
-      Column() {
-        Row({ space: 5 }) {
-          Stack({ alignContent: Alignment.Center }) {
-            Circle().width(17).height(17).fill('#FFFFFF')
-            IconGlyph({
-              symbol: I_MIC,
-              iconSize: 11,
-              color: '#E2432F',
-            })
-          }
+      Column({ space: 2 }) {
+        // 顶部：平台标（小圆点 + 平台名），一行 8fp，占高度很少
+        Row({ space: 3 }) {
+          Circle().width(7).height(7).fill('#FFFFFF').opacity(0.85)
           Text(this.platform)
-            .fontSize(11.5)
-            .fontColor('#E6FFFFFF')
+            .fontSize(8.5)
+            .fontColor('#CCFFFFFF')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
         }
         .width('100%')
-        .padding({ left: 13, top: 13 })
 
         Blank()
+
+        // 榜名：两行以内（「抖音热歌榜」这类五字榜名正好两行放下）
         Text(this.title)
-          .fontSize(34)
-          .fontWeight(FontWeight.Bold)
+          .fontSize(11.5)
+          .fontWeight(FontWeight.Medium)
           .fontColor(Color.White)
-          .textShadow({ radius: 12, color: '#33000000', offsetX: 0, offsetY: 3 })
-        Blank()
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .lineHeight(14)
+          .textShadow({ radius: 5, color: '#33000000', offsetX: 0, offsetY: 1 })
 
-        // 给底部信息条留位
-        Column().height(80)
+        Blank()
       }
       .width('100%')
       .height('100%')
-
-      Row({ space: 8 }) {
-        Column({ space: 3 }) {
-          Text(this.title)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(Color.White)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-            .textAlign(TextAlign.Start)
-          Text(this.subtitle)
-            .fontSize(11.5)
-            .fontColor('#B3FFFFFF')
-            .width('100%')
-            .textAlign(TextAlign.Start)
-        }
-        .layoutWeight(1)
-
-        Stack({ alignContent: Alignment.Center }) {
-          Circle().width(34).height(34).fill('#FFFFFF')
-          IconGlyph({
-            symbol: I_PLAY,
-            iconSize: 19,
-            color: '#1A1A1A',
-          })
-        }
-        .width(38)
-        .height(38)
-      }
-      .width('100%')
-      .height(80)
-      .padding({ left: 13, right: 13 })
+      .padding({ left: 8, right: 8, top: 7, bottom: 7 })
     }
-    .width(this.cardWidth)
-    .height(this.cardHeight)
-    .borderRadius(22)
+    .width('100%')
+    .height('100%')
+    .borderRadius(12)
     .clip(true)
-    .shadow({ radius: 16, color: '#1F000000', offsetX: 0, offsetY: 6 })
+    .shadow({ radius: 6, color: '#12000000', offsetX: 0, offsetY: 2 })
     .onClick(() => {
       this.onTap();
     })
@@ -122,6 +94,12 @@ const BOARD_COLORS: string[][] = [
 function boardColors(index: number): string[] {
   return BOARD_COLORS[index % BOARD_COLORS.length];
 }
+
+/** 榜单小卡尺寸（vp）：边长按「两个图标」量级给（64vp），五字榜名两行放得下 */
+const BOARD_CARD_HEIGHT: number = 64;
+/** 单张卡允许的最小宽度，用来算一行能放几个（列宽由 1fr 均分，通常略大于它） */
+const BOARD_MIN_WIDTH: number = 72;
+const BOARD_GAP: number = 8;
 
 /** 空条目哨兵：数据源刷新期间框架可能按旧 totalCount 请求越界索引，返回空条目避免渲染 undefined */
 const EMPTY_PLAYLIST_ITEM: LxPlaylistItem = {
@@ -244,6 +222,8 @@ export struct RecommendView {
   @State sorts: LxSortItem[] = sortListOf('kw');
   @State sortIndex: number = 0;
   @State boards: LxBoardItem[] = [];
+  /** 榜单网格的实测宽度（vp）：用来算一行放几个小卡，宽屏自动多排一列 */
+  @State boardAreaWidth: number = 0;
   @State playlists: LxPlaylistItem[] = [];
   @State loading: boolean = false;
   @State loadingMore: boolean = false;
@@ -323,11 +303,10 @@ export struct RecommendView {
   }
 
   /**
-   * 推荐来源变了（标题栏里的来源胶囊改的就是这个值）
+   * 推荐来源变了（页内顶部 TX / KW / KG / MG / WY 五个按钮改的就是这个值）
    *
-   * 与 switchPlatform 的区别：那个是「点自己画的胶囊」时调的，会先写值再重置；
-   * 现在写值的是壳层，本页只能靠 @Watch 感知 —— 重置的逻辑挪到这里，
-   * 两条路（壳层改值 / 首次进入）都走同一套。
+   * 按钮只负责写值，重置与重拉统一收在这里：不管是点按钮，还是外部改 AppStorage，
+   * 甚至首次进入，都走同一套，不会出现两处逻辑各写一半。
    */
   private onPlatformChanged(): void {
     if (!LIST_PLATFORMS.includes(this.platform)) {
@@ -342,6 +321,14 @@ export struct RecommendView {
     void this.reload();
   }
 
+  /** 点顶部平台按钮：写回共享的来源值，@Watch 会接着重拉第一页 */
+  private switchPlatform(source: string): void {
+    if (this.platform === source) {
+      return;
+    }
+    this.platform = source;
+  }
+
   private switchSort(index: number): void {
     if (index === this.sortIndex) {
       return;
@@ -351,6 +338,46 @@ export struct RecommendView {
     this.playlistSource.setItems(this.playlists);
     this.page = 0;
     void this.reload();
+  }
+
+  /**
+   * 榜单小卡每行几个：按可用宽度算（一张卡不小于 BOARD_MIN_WIDTH），至少 4 个，
+   * 手机上一行 4 个、车机 / 平板更宽会自然变多；榜单多就自动换行全部铺开，不再横滑
+   */
+  private boardColumnCount(): number {
+    if (this.boardAreaWidth <= 0) {
+      return 4;
+    }
+    const count: number = Math.floor((this.boardAreaWidth + BOARD_GAP) / (BOARD_MIN_WIDTH + BOARD_GAP));
+    return Math.max(4, count);
+  }
+
+  private boardColumnsTemplate(): string {
+    let tpl: string = '';
+    const cols: number = this.boardColumnCount();
+    for (let i = 0; i < cols; i++) {
+      tpl = tpl.length === 0 ? '1fr' : `${tpl} 1fr`;
+    }
+    return tpl;
+  }
+
+  private boardRows(): number {
+    const cols: number = this.boardColumnCount();
+    return Math.max(1, Math.ceil(this.boards.length / cols));
+  }
+
+  private boardRowsTemplate(): string {
+    let tpl: string = '';
+    const rows: number = this.boardRows();
+    for (let i = 0; i < rows; i++) {
+      tpl = tpl.length === 0 ? '1fr' : `${tpl} 1fr`;
+    }
+    return tpl;
+  }
+
+  private boardGridHeight(): number {
+    const rows: number = this.boardRows();
+    return rows * BOARD_CARD_HEIGHT + (rows - 1) * BOARD_GAP;
   }
 
   private openBoard(board: LxBoardItem): void {
@@ -393,12 +420,40 @@ export struct RecommendView {
   // ------------------------------------------------------------ 构建
 
   /**
-   * 排序下拉菜单（各平台给的排序项不一样，有几个列几个）
+   * 顶部平台按钮：TX / KW / KG / MG / WY 一排，等分宽度
    *
-   * 注意「推荐来源」那颗胶囊已经不在本页了：它跟「搜索」钮一起搬到了标题栏
-   * （沉浸光感只在 Navigation 标题栏里生效），所以来源那一份菜单也跟着搬去了
-   * pages/Index.ets，本页只留排序这一份 —— 排序是列表自己的事，跟着列表走。
+   * 对应各平台自己的网页歌单页，点哪个就按那个平台的口径重拉推荐；跟「隔壁多媒体」
+   * 音乐页同一套用法。它固定在标题栏下方、不随内容滚走 —— 换平台是这一页最常用
+   * 的动作，滚到一半想换平台不用先滚回顶部；顶部让出状态栏 + 标题栏（topInset）。
    */
+  @Builder
+  platformTabs() {
+    Row({ space: 4 }) {
+      ForEach(R_TAB_SOURCES, (source: string, index: number) => {
+        Text(R_TAB_LABELS[index])
+          .fontSize(13.5)
+          .fontWeight(this.platform === source ? FontWeight.Medium : FontWeight.Normal)
+          .fontColor(this.platform === source ? C_ON_ACCENT : C_TEXT_SUB)
+          .textAlign(TextAlign.Center)
+          .layoutWeight(1)
+          .height(32)
+          .borderRadius(16)
+          .backgroundColor(this.platform === source ? C_RED : Color.Transparent)
+          .animation({ duration: 160, curve: Curve.EaseOut })
+          .onClick(() => {
+            this.switchPlatform(source);
+          })
+          .accessibilityText(`切换到${platformName(source)}`)
+          .accessibilityLevel('yes')
+      }, (source: string) => source)
+    }
+    .width('100%')
+    .padding(3)
+    .borderRadius(19)
+    .backgroundColor(C_SEG_BG)
+    .margin({ left: 16, right: 16, top: this.topInset + 6, bottom: 8 })
+  }
+
   @Builder
   sortMenu() {
     Menu() {
@@ -504,11 +559,12 @@ export struct RecommendView {
       }
 
       Column() {
-      // 页头（大标题 + 来源胶囊 + 搜索钮）搬到了壳层的 HdsNavigation 标题栏里，
-      // 见 pages/Index.ets 的 homeHeader：沉浸光感只在标题栏 / 底部 TabBar 里生效，
-      // 留在内容区的话 systemMaterial 会被系统判定为 out of scope。这里只留出
-      // 标题栏那一段的高度（topInset 由壳层传来的是「状态栏 + 标题栏」）。
-      // ---------------------------------------------------- 内容
+      // 页头（大标题 + 搜索钮）在壳层的 HdsNavigation 标题栏里，见 pages/Index.ets 的
+      // homeHeader：沉浸光感只在标题栏 / 底部 TabBar 里生效，留在内容区的话
+      // systemMaterial 会被系统判定为 out of scope。本页只留平台按钮这一排在最上面，
+      // 顶部让出 topInset（壳层传的是「状态栏 + 标题栏」那一段高度）。
+      this.platformTabs()
+
       Refresh({ refreshing: $$this.refreshing }) {
         List({ space: 0 }) {
           if (this.boards.length > 0) {
@@ -529,17 +585,16 @@ export struct RecommendView {
             }
 
             ListItem() {
-              List({ space: 12 }) {
+              // 榜单卡改成 64vp 小方块、按列铺满：手机上每行 4 个（车机 / 平板更宽会更多），
+              // 榜单有十几个就自动往下排满行，不再横向滑动——一眼全看完，比横滑大卡省事
+              Grid() {
                 ForEach(this.boards, (board: LxBoardItem, index: number) => {
-                  ListItem() {
+                  GridItem() {
                     RankCard({
                       title: board.name,
-                      subtitle: '在线排行榜',
                       platform: platformName(board.source),
                       colorA: boardColors(index)[0],
                       colorB: boardColors(index)[1],
-                      cardWidth: 180,
-                      cardHeight: 212,
                       onTap: () => {
                         this.openBoard(board);
                       },
@@ -547,12 +602,21 @@ export struct RecommendView {
                   }
                 }, (board: LxBoardItem) => board.id)
               }
-              .scrollBar(BarState.Off)
-              .edgeEffect(EdgeEffect.Spring)
-              .listDirection(Axis.Horizontal)
+              .columnsTemplate(this.boardColumnsTemplate())
+              .rowsTemplate(this.boardRowsTemplate())
+              .columnsGap(BOARD_GAP)
+              .rowsGap(BOARD_GAP)
               .width('100%')
-              .height(212)
-              .padding({ left: 16 })
+              .height(this.boardGridHeight())
+              .padding({ left: 16, right: 16 })
+              .scrollBar(BarState.Off)
+              .onAreaChange((_oldArea: Area, newArea: Area) => {
+                // 扣掉左右各 16 的内边距，得到真正能铺卡片的宽度
+                const width: number = (newArea.width as number) - 32;
+                if (width > 0 && Math.abs(width - this.boardAreaWidth) > 1) {
+                  this.boardAreaWidth = width;
+                }
+              })
             }
           }
 
@@ -659,7 +723,7 @@ export struct RecommendView {
          * 换成 List 自己的 contentStartOffset 之后，偏移只是"内容起点"，滚动时列表项
          * 能正常进入到标题栏底下、透过透明标题栏显示出来。
          */
-        .contentStartOffset(this.topInset + 6)
+        .contentStartOffset(6)
         .onScroll((_xOffset: number, yOffset: number) => {
           this.handleFoldScroll(yOffset);
         })

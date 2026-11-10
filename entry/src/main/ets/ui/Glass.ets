@@ -390,3 +390,53 @@ export function regularGlass(radius: number, dark: boolean = false, tint: Resour
 export function materialFirstGlass(radius: number, level: number = 0): GlassModifier {
   return thinGlass(radius, false, '', level).setMaterialFirst(true);
 }
+
+/**
+ * 只留形状的「无底」修饰：**完全不画底、不做模糊**，形状以外的像素全部透出去
+ *
+ * 为什么不能直接用 thinGlass(..., '') 了事（2026-11 用户第二次反馈「白底还在，依然不是透明」）：
+ * thinGlass 除了给一层 10% 白，还挂了 `backgroundBlurStyle` 毛玻璃。列表底色本身就是白/浅色，
+ * 磨砂层把背后内容糊成一片白，观感与原来那块 82% 白板几乎没差别 —— 所以「把 tint 调淡」
+ * 这条路走不通，必须连模糊一起去掉。
+ *
+ * 用法：调用方自己给 `.borderRadius`（胶囊 = 栏高/2）、`.border`（1.2vp 亮边）与 `.shadow`
+ * （浮起感），形状靠这三样表达；底色一个像素都不画。
+ *
+ * 注意：**必须显式写 `backgroundColor(Color.Transparent)`**，不能什么都不设 —— Button/Row
+ * 这类组件可能带默认底色，漏了这句会把组件自身的灰白底露出来（见上方 materialFirst 的说明）。
+ */
+class ClearPlateModifier implements AttributeModifier<CommonAttribute> {
+  private radius: number = 20;
+  private tint: ResourceColor = Color.Transparent;
+
+  constructor(radius: number, tint: ResourceColor) {
+    this.radius = radius;
+    this.tint = tint;
+  }
+
+  applyNormalAttribute(instance: CommonAttribute): void {
+    instance.borderRadius(this.radius);
+    instance.backgroundColor(this.tint);
+    // 刻意不调 backgroundBlurStyle：磨砂会把背后的白底列表糊成白板（见类注释）
+  }
+}
+
+/** 便捷构造：见 {@link ClearPlateModifier} —— 只要形状、不要底的悬浮底板 */
+export function clearPlate(radius: number): ClearPlateModifier {
+  return new ClearPlateModifier(radius, Color.Transparent);
+}
+
+/**
+ * 带「薄底色」的悬浮底板：形状 + 一层半透明填充，**仍然不做模糊**
+ *
+ * 2026-11 用户第三次反馈：clearPlate 一点底色都不画，浅灰背景上胶囊整条消失
+ * （截图里只剩阴影，看不到胶囊本体，图标文字像浮在空中）。既要能看见本体、
+ * 又不能回到把列表糊成白板的老路，所以取中间路线：
+ *   - 给一层 55%（深色 24%）白的实心半透明底 —— 底部/列表内容还隐约透出来，但胶囊面清楚
+ *   - 依旧不挂 backgroundBlurStyle —— 模糊才是之前「白板」的真正成因
+ * 填充色走 c_plate_fill token（深浅模式各一档），描边走 c_plate_edge。
+ */
+export function plateGlass(radius: number, tint: ResourceColor): ClearPlateModifier {
+  return new ClearPlateModifier(radius, tint);
+}
+

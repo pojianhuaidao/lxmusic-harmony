@@ -11,10 +11,11 @@ import { LocalMusic } from '../core/local/LocalMusic';
 import { WebDavLibrary } from '../core/webdav/WebDavLibrary';
 import { SourceEngine } from '../core/source/SourceEngine';
 import { SourceInfo, SourceLog } from '../core/source/LxTypes';
-import { OnlineRoute, LIST_PLATFORMS, platformName } from '../core/music/MusicList';
-import { C_BG, C_GLASS_SOLID, C_ICON, C_RED, C_TAB_UNSELECTED, C_TEXT, C_TEXT_SUB, F_SUB } from '../ui/Theme';
+import { OnlineRoute } from '../core/music/MusicList';
+import { C_BG, C_GLASS_SOLID, C_ICON, C_PLATE_EDGE, C_PLATE_FILL, C_RED, C_TAB_UNSELECTED, C_TEXT,
+  F_SUB } from '../ui/Theme';
 import { immersiveMaterialFor, immersiveMaterialForDialog, isGlassMaterialSupported, materialFirstGlass,
-  thinGlass } from '../ui/Glass';
+  plateGlass, thinGlass } from '../ui/Glass';
 import { DustLayer } from '../ui/Dust';
 import { SourceSandboxHost } from '../components/SourceSandboxHost';
 import { SyncManager } from '../core/sync/SyncManager';
@@ -25,14 +26,11 @@ import { PageTitle, RoundIconButton, WidePane } from '../ui/Widgets';
 import { AppearanceSettingsView } from '../views/AppearanceSettingsView';
 import { AboutView } from '../views/AboutView';
 import { WebDavSettingsView } from '../views/WebDavSettingsView';
-import { I_CHEVRON_DOWN, I_CLOSE, I_HOME, I_HOME_FILL, I_PERSON, I_PERSON_FILL, I_PLAYLIST,
+import { I_CLOSE, I_HOME, I_HOME_FILL, I_PERSON, I_PERSON_FILL, I_PLAYLIST,
   I_PLAYLIST_FILL, I_SEARCH, I_SELECT_ALL, IconGlyph } from '../ui/Icons';
 import { MiniBarView } from '../views/MiniBar';
-import { HuaweiAccount, K_ACCOUNT_UID, K_ACCOUNT_NAME } from '../core/account/HuaweiAccount';
 import { MineView } from '../views/MineView';
 import { SongListView } from '../views/SongListView';
-import { BackupOptionsView } from '../views/BackupOptionsView';
-import { HuaweiAccountSheet } from '../views/HuaweiAccountSheet';
 import { OnlineListView } from '../views/OnlineListView';
 import { PanePage } from '../views/PanePage';
 import { PlayerView } from '../views/PlayerView';
@@ -42,7 +40,7 @@ import { HistoryView } from '../views/HistoryView';
 import { LocalMusicPane } from '../views/LocalMusicView';
 import { DownloadListPane } from '../views/DownloadListView';
 import { WebDavPane } from '../views/WebDavView';
-import { K_RECOMMEND_SOURCE, RecommendView } from '../views/RecommendView';
+import { RecommendView } from '../views/RecommendView';
 import { SearchView } from '../views/SearchView';
 import { SourceSettingsView } from '../views/SourceSettingsView';
 import { CacheSettingsView } from '../views/CacheSettingsView';
@@ -58,11 +56,25 @@ import { K_SELECT_ACTIVE, K_SELECT_ALL, K_SELECT_COUNT, SelectSession } from '..
 const DOMAIN: number = 0x0001;
 const TAG: string = 'Index';
 
+/**
+ * 底部悬浮底板：形状 + 一层薄底色（2026-11 用户三轮反馈后的定稿）
+ *
+ * 演进史（别再往回退，每一档都被用户退过）：
+ *   1. C_GLASS_SOLID(82% 白) —— 「白底太重，把列表盖住了」
+ *   2. thinGlass 极透档（10% 白 + 磨砂） —— 「白底还在」，根因是 backgroundBlurStyle：
+ *      列表底色本来就浅，磨砂把透上来的内容糊成一片白，观感和实心白板没差
+ *   3. clearPlate（一点底都不画） —— 「全透明就看不到了」，浅灰底上胶囊整条消失
+ *   4. 现在：plateGlass(HDS_BAR_HEIGHT / 2, C_PLATE_FILL) —— 72%(深色 30%) 白实心底、
+ *      **依旧不做模糊**，列表还隐约透出来，但胶囊本体一眼可见
+ *
+ * 描边同步从写死的 #66FFFFFF 换成 c_plate_edge：浅色底上一条纯白描边本身就是
+ * 用户说的「最底下那截白边」的来源之一，改成极淡的黑（深色模式淡白）后消失，
+ * 轮廓交给阴影表达。想临时回到磨砂观感：换回 thinGlass(...) 即可。
+ */
+
 const PAGE_MAIN: string = 'main';
 const PAGE_SEARCH: string = 'search';
 const PAGE_SOURCE: string = 'source';
-/** 备份选项（原「数据」/「同步设置」，含华为账号与 WebDAV 两条备份链路） */
-const PAGE_BACKUP: string = 'backup';
 const PAGE_PLAYLIST: string = 'playlist';
 const PAGE_CACHE: string = 'cache';
 /** 播放设置 */
@@ -143,9 +155,6 @@ struct Index {
   @State routeOnlineId: string = '';
   @State routeOnlineName: string = '';
   @State routeOnlineCover: string = '';
-  /** 华为账号面板（「我的」页右上角人形钮打开的底部半模态） */
-  @State accountOpen: boolean = false;
-  @StorageLink(K_ACCOUNT_UID) accountUid: string = '';
   @StorageLink(K_CURRENT_ID) currentId: string = '';
   /** 通知栏媒体卡 / 系统拉起后待直达播放页：EntryAbility 置位，这里消费并清掉 */
   @StorageLink(K_OPEN_PLAYER_PENDING) @Watch('onOpenPlayerPendingChanged') openPlayerPending: boolean = false;
@@ -169,7 +178,6 @@ struct Index {
    * 那颗来源胶囊跟着「搜索」钮一起搬进了标题栏（沉浸光感只在标题栏 / 底部 TabBar
    * 里生效，见 ui/Glass.ets），所以这个值现在由壳层写；推荐页订阅同一个键重新取数。
    */
-  @StorageLink(K_RECOMMEND_SOURCE) recommendSource: string = 'kw';
   /**
    * 多选：顶栏整条换成「取消 + 已选中 N 项 + 全选」
    *
@@ -212,14 +220,6 @@ struct Index {
         console.error('[Index] bootstrap failed: ' + JSON.stringify(e));
       }
     }, 0);
-
-    // 华为账号：启动时恢复端侧登录态（登录后「我的」页右上角人形钮变实心）
-    try {
-      const hostContext: common.Context = this.getUIContext().getHostContext() as common.Context;
-      void HuaweiAccount.getInstance().bootstrap(hostContext);
-    } catch (e) {
-      // 预览器等环境拿不到 context：按未登录处理，不影响其余功能
-    }
 
     const engine = SourceEngine.getInstance();
     this.refreshSourceSummary();
@@ -556,12 +556,46 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .justifyContent(FlexAlign.Center)
-    // 收起态：这一行整个透明掉（栏体与胶囊底也透明），页签图标由并排胶囊里的
-    // 紧凑按钮承载（见 collapsedBottomBar），避免 HDS 重新构建 tabBar 造成闪烁
-    .opacity(this.bottomBarCollapsed ? 0 : 1)
-    // 收起时比并排胶囊先淡出（160ms），避免「两套页签半透明叠加」的残影
+    // 页签的**视觉**搬到壳层叠加层（tabBarItemVisual / tabBarGlass，见 build() 里
+    // HdsNavigation 之后那一层）：HDS 自己渲染的图标文字必须彻底藏起来，否则会和
+    // 叠加层重影；opacity 0 只是不画，命中区域还在（这里再设 None，点击统一交给叠加层）
+    .justifyContent(FlexAlign.Start)
+    .opacity(0)
+    .hitTestBehavior(HitTestMode.None)
     .animation({ duration: 160, curve: Curve.EaseOut })
+  }
+
+  /**
+   * 叠加层里的单个页签：图标 + 文字（与 HDS 栏体同高、等宽均分）
+   *
+   * 2026-11 用户连反馈两次「页签栏依然透明」：真因不是玻璃底不够白，而是自绘的
+   * tabBarGlass 一直画在 HdsNavigation **下面**，被列表页自己的不透明背景整块盖住了
+   * （截图里栏体区域的颜色与列表内容完全一致，胶囊 72% 白那层根本没出现）。
+   * 所以把「胶囊底 + 图标文字」整条搬到导航之上的一层，点击也由这一层自己接管
+   * （tabsController.changeIndex），HDS 那边只当透明占位。
+   */
+  @Builder
+  tabBarItemVisual(index: number) {
+    Column({ space: 4 }) {
+      SymbolGlyph(this.activeTab === index ? TABS[index].iconActive : TABS[index].icon)
+        .fontSize(22)
+        .fontWeight(FontWeight.Regular)
+        .height(22)
+        .fontColor([this.tabColor(index)])
+      Text(TABS[index].label)
+        .fontSize(11)
+        .fontColor(this.tabColor(index))
+    }
+    .layoutWeight(1)
+    .height('100%')
+    .justifyContent(FlexAlign.Center)
+    .alignItems(HorizontalAlign.Center)
+    .onClick(() => {
+      this.bottomBarCollapsed = false;
+      this.tabsController.changeIndex(index);
+    })
+    .accessibilityText(`${TABS[index].label}页签`)
+    .accessibilityLevel('yes')
   }
 
   /** 收起态页签按钮：图标 + 小字，点按即展开两行并切页签 */
@@ -627,10 +661,10 @@ struct Index {
     .width('100%')
     .height(HDS_BAR_HEIGHT)
     .borderRadius(HDS_BAR_HEIGHT / 2)
-    // 悬浮胶囊可见性：与常驻迷你条/页签栏同款强阴影 + 高光边，收起态同样轮廓清晰
+    // 悬浮胶囊可见性：与常驻迷你条/页签栏同款强阴影 + c_plate_edge 描边，收起态同样轮廓清晰
     .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
-    .border({ width: 1.2, color: '#66FFFFFF' })
-    .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+    .border({ width: 1, color: C_PLATE_EDGE })
+    .attributeModifier(plateGlass(HDS_BAR_HEIGHT / 2, C_PLATE_FILL))
     // 胶囊左右各留 6vp：与页签胶囊同一套留边观感，两端内容不贴圆角
     .padding({ left: 6, right: 6 })
     .align(Alignment.Bottom)
@@ -662,16 +696,20 @@ struct Index {
   @Builder
   tabBarGlass() {
     Column() {
-      Row()
-        .width('100%')
-        .height(HDS_BAR_HEIGHT)
-        .borderRadius(HDS_BAR_HEIGHT / 2)
-        // 悬浮胶囊可见性：浅色内容底上 82% 白底 + 纯白描边几乎与背景融为一体
-        // （用户反馈「看不出胶囊」），加深阴影浮起感、追加半透明白高光边，
-        // 深浅模式都能清晰看出胶囊轮廓
-        .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
-        .border({ width: 1.2, color: '#66FFFFFF' })
-        .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+      Row() {
+        this.tabBarItemVisual(0)
+        this.tabBarItemVisual(1)
+        this.tabBarItemVisual(2)
+      }
+      .width('100%')
+      .height(HDS_BAR_HEIGHT)
+      .borderRadius(HDS_BAR_HEIGHT / 2)
+      // 悬浮胶囊可见性：底色走 c_plate_fill（浅色 72% 白），描边走 c_plate_edge
+      // （极淡的黑 —— 纯白描边在浅灰底上就是那条扎眼的「白边」），
+      // 再加一层阴影表达浮起，深浅模式都能清晰看出胶囊
+      .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
+      .border({ width: 1, color: C_PLATE_EDGE })
+      .attributeModifier(plateGlass(HDS_BAR_HEIGHT / 2, C_PLATE_FILL))
     }
     .width('100%')
     .padding({
@@ -680,8 +718,13 @@ struct Index {
       bottom: this.homeTabBarBottomMarginVp(),
     })
     .align(Alignment.Bottom)
-    // 收起态：胶囊底透明（栏体与页签图标也透明，见 tabBarItem）
+    // 这一层压在导航之上，外壳必须让触摸穿透（只让三个页签格子自己响应）：
+    // 否则屏底 96vp 那条带子会把列表的滑动/点击全吞掉
+    .hitTestBehavior(HitTestMode.None)
+    // 收起态：胶囊与页签一起透明让位（见 collapsedBottomBar）
     .opacity(this.bottomBarCollapsed ? 0 : 1)
+    // 收起态禁交互：透明层不拦截下方并排胶囊的点击
+    .enabled(!this.bottomBarCollapsed)
     // 收起时先于并排胶囊淡出（160ms），见 tabBarItem 的说明
     .animation({ duration: 160, curve: Curve.EaseOut })
   }
@@ -795,20 +838,10 @@ struct Index {
       PageTitle({ text: TABS[this.activeTab].label })
       Blank()
       if (this.activeTab === 0) {
-        this.sourcePicker()
         RoundIconButton({
           icon: I_SEARCH, boxSize: 40, iconSize: 21, label: '搜索', materialFirst: true,
           onTap: () => {
             this.go(PAGE_SEARCH);
-          },
-        })
-      } else if (this.activeTab === 2) {
-        // 华为账号：未登录空心人形、已登录实心（点开登录 / 备份 / 恢复面板）
-        RoundIconButton({
-          icon: this.accountUid.length > 0 ? I_PERSON_FILL : I_PERSON,
-          boxSize: 40, iconSize: 21, label: '华为账号', materialFirst: true,
-          onTap: () => {
-            this.accountOpen = true;
           },
         })
       }
@@ -817,65 +850,9 @@ struct Index {
     .padding({ left: 16, right: 16 })
   }
 
-  /**
-   * 推荐来源胶囊（酷我 / 酷狗 / 咪咕 / QQ / 网易云）
-   *
-   * 自己画胶囊 + 系统的下拉菜单（bindMenu），不用系统 `Select` 再套一层自绘框：
-   * Select 自带一套内边距与高度（≥40vp），塞进 38vp 的框里就会出现「框一种尺寸、
-   * 文字按另一种尺寸排」的错位。现在框高、文字基线、箭头间距全由这里定，必然对得上。
-   *
-   * 玻璃走 materialFirstGlass：它在标题栏里，要让系统材质自己画，不叠自绘底。
-   */
-  @Builder
-  sourcePicker() {
-    Row({ space: 3 }) {
-      Text(platformName(this.recommendSource))
-        .fontSize(14.5)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(C_TEXT)
-        .maxLines(1)
-      IconGlyph({ symbol: I_CHEVRON_DOWN, iconSize: 14, color: C_TEXT_SUB })
-    }
-    .height(36)
-    .padding({ left: 14, right: 10 })
-    .attributeModifier(materialFirstGlass(18, this.materialLevel))
-    .systemMaterial(immersiveMaterialFor(this.materialLevel))
-    .bindMenu(this.sourceMenu())
-    .accessibilityText(`推荐来源：${platformName(this.recommendSource)}，点按切换`)
-    .accessibilityLevel('yes')
-  }
-
-  /** 来源下拉菜单：改的是 AppStorage 里的推荐来源，推荐页订阅它重新取数 */
-  @Builder
-  sourceMenu() {
-    Menu() {
-      ForEach(LIST_PLATFORMS, (id: string) => {
-        MenuItem({ content: platformName(id) })
-          .onClick(() => {
-            AppStorage.setOrCreate(K_RECOMMEND_SOURCE, id);
-          })
-      }, (id: string) => id)
-    }
-  }
-
   @Builder
   queueSheet() {
     PlayQueueContent({ bottomInset: this.bottomInset })
-  }
-
-  /** 华为账号登录 / 管理面板（「我的」页右上角人形钮打开的底部半模态） */
-  @Builder
-  accountSheet() {
-    HuaweiAccountSheet({
-      bottomInset: this.bottomInset,
-      onGoBackup: () => {
-        this.accountOpen = false;
-        this.go(PAGE_BACKUP);
-      },
-      onClose: () => {
-        this.accountOpen = false;
-      },
-    })
   }
 
   /**
@@ -962,10 +939,6 @@ struct Index {
   private onSettingAction(action: string): void {
     if (action === 'source') {
       this.go(PAGE_SOURCE);
-      return;
-    }
-    if (action === 'sync') {
-      this.go(PAGE_BACKUP);
       return;
     }
     if (action === 'cache') {
@@ -1181,16 +1154,6 @@ struct Index {
       .titleBar(this.titleBarOptions('音源设置'))
       .onHidden(() => {
         this.refreshSourceSummary();
-        this.onDestinationHidden();
-      })
-    } else if (name === PAGE_BACKUP) {
-      HdsNavDestination() {
-        WidePane({ maxWidth: this.contentMaxWidth(), fadeTop: HDS_TITLE_BAR_HEIGHT + this.topInset + 10 }) {
-          BackupOptionsView({ bottomInset: this.bottomInset, topInset: HDS_TITLE_BAR_HEIGHT + this.topInset })
-        }
-      }
-      .titleBar(this.titleBarOptions('备份选项'))
-      .onHidden(() => {
         this.onDestinationHidden();
       })
     } else if (name === PAGE_CACHE) {
@@ -1436,8 +1399,9 @@ struct Index {
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       // ---------------------------------------------------- 华为音乐式悬浮页签栏（圆角玻璃底）
-      // 垫在 HdsNavigation 之下：栏体透明后页签图标/文字浮在这条胶囊上，见 tabBarGlass 说明
-      this.tabBarGlass()
+      // 注意：页签栏这一层（胶囊底 + 图标文字）必须画在 HdsNavigation **之上**，
+      // 见下面 HdsNavigation 之后的 this.tabBarGlass()。放在这里会被列表页
+      // 自己的不透明背景整块盖住 —— 那就是用户反复看到的「页签栏依然透明」。
 
       // ---------------------------------------------------- HDS 导航（主页签 + 子页面）
       HdsNavigation(this.pathStack) {
@@ -1509,8 +1473,13 @@ struct Index {
         .barMode(BarMode.Fixed)
         .barOverlap(true)
         .scrollable(true)
-        // 高度写死成与自绘迷你栏同一个常量：两边必须一样高，观感才统一
-        .barHeight(HDS_BAR_HEIGHT)
+        // 高度：栏体内容 56vp + 底部避让区（≥40vp）。原来是把整棵 HdsTabs 靠外层
+        // Column 的 padding-bottom 往上抬，结果那 40vp 的 padding 是「空白格」——
+        // 它不画内容、只露出页面底色 c_bg(#F1F1F1)，就是屏幕最下面那条全宽浅灰白边。
+        // 现在改成把避让区算进栏体高度：HdsTabs 铺满整屏，列表内容靠 barOverlap 一直
+        // 滚到屏幕底，栏体自身透明（见下面的 maskColor / maskHeight），于是那截白边
+        // 不再存在，图标仍停在离底 40vp 的位置。
+        .barHeight(HDS_BAR_HEIGHT + this.homeTabBarBottomMarginVp())
         .zIndex(1)
         // 已移除 .barFloatingStyle()：API 26.0.0 新增，HarmonyOS 6.1(23) 设备不存在该 API，
         // 调用即抛 undefined is not callable（JsCrash，与 OnlineListView/PanePage/PlaylistDetailView 同根因），
@@ -1518,6 +1487,14 @@ struct Index {
         // 华为音乐式悬浮改版：栏体不要自己的灰白底（观感全交给下方 tabBarGlass 那条圆角
         // 玻璃胶囊），页签图标/文字仍由 HdsTabs 渲染，与胶囊重合（同一套底距/留边口径）
         .barBackgroundColor(Color.Transparent)
+        // 真正的白底来源：HdsTabs 栏体自带一层「栏体遮罩」（maskColor，默认浅色渐变白，
+        // 高度默认是组件高 + 32vp，向下多伸出 16vp —— 屏底那截白边就是它）。
+        // maskColor 光传 Color.Transparent 会被当成「没设」而回落默认色，这里给显式
+        // 全透明色值，并把 maskHeight 直接归零，连向下延伸的那 16vp 一起清掉；
+        // 栏体模糊与模糊策略一并关掉，自绘胶囊才是唯一的底。
+        .barBackgroundStyle({ maskColor: '#00FFFFFF', maskHeight: 0 })
+        .barBackgroundBlurStyle(BlurStyle.NONE)
+        .blurStrategy(BlurStrategy.DISABLE)
         .onChange((index: number) => {
           this.activeTab = index;
         })
@@ -1527,8 +1504,9 @@ struct Index {
         }
         .width('100%')
         .height('100%')
-        // 底部页签栏整体抬高 ≥28vp（导航条避让，见上面 Column 内注释）
-        .padding({ bottom: this.homeTabBarBottomMarginVp() })
+        // 这里原来有一层 padding({ bottom: homeTabBarBottomMarginVp() }) 负责把页签栏
+        // 整体抬高，避让区就成了屏底那条全宽白边（见 barHeight 处的说明）。
+        // 避让区已经算进栏体高度，这里不再留 padding —— HdsTabs 直接铺到屏幕底。
       // 首页也是有标题栏的：页头（大标题 + 那几个圆钮）就画在标题栏的 stackBuilder 里，
       // 沉浸光感才生效（见 homeTitleBar 的说明）
       .titleBar(this.homeTitleBar())
@@ -1580,6 +1558,14 @@ struct Index {
 
       // 播放列表是系统的半模态：bindSheet 挂在最外层 Stack 上（见文件末尾）
 
+      // ---------------------------------------------------- 悬浮页签栏（胶囊底 + 页签）
+      // 压在 HdsNavigation 之上：HDS 栏体与页签都是透明的，视觉全由这一层给
+      // （胶囊 72% 白 + c_plate_edge 描边 + 阴影，列表内容隐约透出 = 「半透明可见」），
+      // 点击也由胶囊里的三个页签自己接管（见 tabBarItemVisual）。
+      if (this.atHomeRoot) {
+        this.tabBarGlass()
+      }
+
       // ---------------------------------------------------- 主页常驻迷你播放条（AGC 问题C）
       // 主页面被三页签占住、迷你条只在子页面/设置页出现 —— 这里在壳层叠一条常驻胶囊：
       // 与页签栏同一套避让口径（底距 ≥28vp），再往上让出 HDS_BAR_HEIGHT + 10 悬在页签栏
@@ -1610,9 +1596,9 @@ struct Index {
         // （用户反馈「看不出胶囊」），加深阴影浮起感、追加半透明白高光边，
         // 深浅模式都能清晰看出胶囊轮廓
         .shadow({ radius: 24, color: 'rgba(0, 0, 0, 0.26)', offsetX: 0, offsetY: 10 })
-        .border({ width: 1.2, color: '#66FFFFFF' })
+        .border({ width: 1, color: C_PLATE_EDGE })
         // 内容区自绘玻璃（内容区不构成系统材质，见 ui/Glass.ets 说明）
-        .attributeModifier(thinGlass(HDS_BAR_HEIGHT / 2, false, C_GLASS_SOLID, this.materialLevel))
+        .attributeModifier(plateGlass(HDS_BAR_HEIGHT / 2, C_PLATE_FILL))
         .align(Alignment.Bottom)
         .margin({ bottom: this.homeTabBarBottomMarginVp() + HDS_BAR_HEIGHT + 10 })
         // 收起态：透明并下移让位，底部只剩并排胶囊一行（见 collapsedBottomBar）
@@ -1660,24 +1646,6 @@ struct Index {
       .width(1)
       .height(1)
       .position({ x: 0, y: 0 })
-
-      // ---------------------------------------------------- 华为账号面板（底部半模态）
-      // 挂在独立的 1x1 节点上：最外层 Stack 已经挂了播放列表的 bindSheet，
-      // 同一个组件不能再叠第二个 bindSheet（见播放器那段的注释）
-      Column()
-        .width(1)
-        .height(1)
-        .bindSheet($$this.accountOpen, this.accountSheet(), {
-          preferType: SheetType.BOTTOM,
-          detents: [SheetSize.MEDIUM],
-          detentSelection: SheetSize.MEDIUM,
-          dragBar: true,
-          showClose: true,
-          backgroundColor: isGlassMaterialSupported() ? Color.Transparent : undefined,
-          blurStyle: isGlassMaterialSupported() ? undefined : BlurStyle.COMPONENT_ULTRA_THICK,
-          systemMaterial: immersiveMaterialForDialog(this.materialLevel),
-          title: { title: '华为账号' },
-        })
 
       // ---------------------------------------------------- 删除粒子飘散
       // 全局唯一的一层：任何页面删除时调 dustBus.spray(x, y)，粒子就在那里散开

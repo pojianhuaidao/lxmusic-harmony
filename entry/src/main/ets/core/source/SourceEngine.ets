@@ -26,9 +26,14 @@ const DOMAIN: number = 0x0001;
 const TAG: string = 'SourceEngine';
 
 const PAGE_READY_TIMEOUT: number = 10000;
-const INIT_TIMEOUT: number = 10000;
+/**
+ * 等待源脚本 send('inited') 的上限。
+ * 单源脚本一个同步调用就到位，但聚合音源包要在同一上下文里依次执行 N 个子源
+ * （每个子源都有自己的同步初始化 / 可能的顶层请求），10s 对 20+ 源的包偏紧，放宽到 30s。
+ */
+const INIT_TIMEOUT: number = 30000;
 /** 等待源脚本注册 request 处理器的轮询上限：聚合型「独家音源」常在异步回调里才注册，固定延时易误杀 */
-const REGISTER_WAIT_TIMEOUT: number = 8000;
+const REGISTER_WAIT_TIMEOUT: number = 15000;
 /**
  * 等待源脚本解析出播放链接的上限。
  * 上游本身对 sendAction 不做超时（一直等），这里给一个足够宽松的上限：
@@ -543,13 +548,14 @@ export class SourceEngine {
           ? '如脚本要求桌面环境，可到音源设置切换兼容模式后重新加载。' : '';
         throw new Error(
           `源脚本执行后仍未注册 request 处理器（脚本可能不是上游自定义源格式，或自身校验未通过）。` +
-          `${scriptErr}脚本长度 ${script.length}，已初始化 ${state.inited}，` +
+          `${scriptErr}脚本长度 ${script.length}，已注册处理器 ${state.handlerCount} 个，已初始化 ${state.inited}，` +
           `发送事件 ${state.sendCalls.length > 0 ? state.sendCalls.join('、') : '无'}，` +
           `沙箱环境 ${state.env}。${envHint}沙箱状态 ${state.raw}`,
         );
       }
       this.pushLog('info', '改用 ArrayBuffer 注入后脚本成功注册 request 处理器');
     }
+    this.pushLog('info', `沙箱已注册 request 处理器 ${state.handlerCount} 个，聚合路由${state.hasRouter ? '已注册' : '未注册'}`);
     const sources: Record<string, SupportedSource> = await initPromise;
     // 记住「这次用的是哪个源」：下次启动自动加载（见 restoreLastSource）
     this.store.saveActive(id, this.sandboxEnv);
@@ -576,6 +582,8 @@ export class SourceEngine {
   private async readDebugState(): Promise<SandboxDebugState> {
     const fallback: SandboxDebugState = {
       hasHandler: false,
+      handlerCount: 0,
+      hasRouter: false,
       inited: false,
       sendCalls: [],
       requestCount: 0,
@@ -605,6 +613,8 @@ export class SourceEngine {
       }
       return {
         hasHandler: debugBool(rec['hasHandler']),
+        handlerCount: debugNumber(rec['handlerCount']),
+        hasRouter: debugBool(rec['hasRouter']),
         inited: debugBool(rec['inited']),
         sendCalls: sendCalls,
         requestCount: debugNumber(rec['requestCount']),
@@ -1021,6 +1031,14 @@ export class SourceEngine {
     } catch (e) {
       return;
     }
+    const isOk: boolean = data.status && data.info !== null && data.info !== undefined;
+    // 聚合音源包内多个子源会各自 send('inited')，沙箱会把每次声明的平台累加合并后上报，
+    // 因此这里不能「只认第一次」：后续上报同样要刷新 supported，否则后声明的平台会被丢弃。
+    if (isOk && data.info !== null && data.info !== undefined) {
+      this.supported = data.info.sources;
+      this.inited = true;
+      this.pushLog('info', `音源初始化成功，支持平台：${Object.keys(this.supported).join(', ')}`);
+    }
     const resolve = this.initResolve;
     const reject = this.initReject;
     this.initResolve = null;
@@ -1032,10 +1050,7 @@ export class SourceEngine {
     if (resolve === null || reject === null) {
       return;
     }
-    if (data.status && data.info !== null && data.info !== undefined) {
-      this.supported = data.info.sources;
-      this.inited = true;
-      this.pushLog('info', `音源初始化成功，支持平台：${Object.keys(this.supported).join(', ')}`);
+    if (isOk && data.info !== null && data.info !== undefined) {
       resolve(data.info.sources);
     } else {
       this.inited = false;
@@ -1264,6 +1279,10 @@ function describeNetworkError(message: string, url: string): string {
 /** 沙箱自检状态（由 lx_preload.js 的 __lx_debug_state__() 返回） */
 interface SandboxDebugState {
   hasHandler: boolean;
+  /** 已注册的 request 处理器数量（聚合包应等于包内子源数） */
+  handlerCount: number;
+  /** 是否注册了聚合路由 lx.registerRouter */
+  hasRouter: boolean;
   inited: boolean;
   sendCalls: string[];
   requestCount: number;

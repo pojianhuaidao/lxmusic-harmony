@@ -27,6 +27,8 @@ const TAG: string = 'WebDavSettings';
  */
 @Component
 export struct WebDavSettingsView {
+  /** 平铺模式：由「我的」页把这一页的设置直接展开，不要自成滚动页 */
+  @Prop embedded: boolean = false;
   /** 内容让出标题栏那一段（壳层传来的「状态栏 + 标题栏」）：见滚动内容里的顶部占位 */
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
@@ -374,61 +376,78 @@ export struct WebDavSettingsView {
   }
 
   build() {
-    Column() {
-      Scroll() {
-        Column({ space: 14 }) {
-          // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
-          // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
-          Column().height(this.topInset + 6).width('100%')
-          this.sectionTitle('服务器')
-          this.serverCard()
-          HintText({ text: '填 WebDAV 目录的完整地址（Nextcloud 通常是 '
-            + 'https://你的域名/remote.php/dav/files/用户名/音乐目录）。'
-            + '「测试连接并扫描」连上之后会把该目录（含子目录）里的音乐扫出来，直接就能播。' })
+    if (this.embedded) {
+      // 平铺模式（「我的」页把每一页设置摊开）：不要自己的滚动与顶部避让，高度随内容长，
+      // 滚动交给外层页面；左右留边也由外层统一给，免得两侧叠成双重内边距。
+      this.body()
+    } else {
+      Column() {
+        Scroll() {
+          this.body()
+        }
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .align(Alignment.Top)
+      }
+      .width('100%')
+      .height('100%')
+      .backgroundColor(C_BG)
+    }
+  }
 
-          this.actionCard()
+  /** 页面主体（独立页 / 「我的」页平铺共用）：embedded 时不留顶部与左右留边 */
+  @Builder
+  body() {
+    Column({ space: 14 }) {
+      // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
+      // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
+      Column().height(this.embedded ? 0 : this.topInset + 6).width('100%')
+      this.sectionTitle('服务器')
+      this.serverCard()
+      HintText({ text: '填 WebDAV 目录的完整地址（Nextcloud 通常是 '
+        + 'https://你的域名/remote.php/dav/files/用户名/音乐目录）。'
+        + '「测试连接并扫描」连上之后会把该目录（含子目录）里的音乐扫出来，直接就能播。' })
 
-          this.sectionTitle('扫描')
-          Column() {
-            Column({ space: 8 }) {
-              ToggleSetting({
-                label: '读取云端标签',
-                value: this.readTags,
-                onPick: (next: boolean) => {
-                  WebDavSettings.getInstance().setReadTags(next);
-                },
-              })
-              HintText({ text: '开启后，扫描时会逐首读取服务器上文件里的标签（歌名 / 歌手 / 专辑 / 时长），'
-                + '匹配封面和歌词会准很多，代价是每首发一次请求，几十首的目录会明显慢一点。'
-                + '关掉就用文件名猜（「歌手 - 歌名」这种命名能猜对），播放时照样能听。' })
-            }
-            .width('100%')
-            .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          }
-          .width('100%')
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
+      this.actionCard()
 
-          this.sectionTitle('曲库与缓存')
-          this.libraryCard()
-          HintText({ text: '曲库就是「上次扫描的结果」这份缓存：服务器上的文件不归这个应用管，'
-            + '要拿掉什么直接在服务器上删、然后重新扫描。'
-            + '云端音乐不参与同步（与本地音乐一致：同步只传在线歌曲）；'
-            + '歌单与收藏里的云端歌存在「非同步侧表」里，上行时不会发出去。' })
-
-          Column().height(this.bottomInset + 20).width('100%')
+      this.sectionTitle('扫描')
+      Column() {
+        Column({ space: 8 }) {
+          ToggleSetting({
+            label: '读取云端标签',
+            value: this.readTags,
+            onPick: (next: boolean) => {
+              WebDavSettings.getInstance().setReadTags(next);
+            },
+          })
+          HintText({ text: '开启后，扫描时会逐首读取服务器上文件里的标签（歌名 / 歌手 / 专辑 / 时长），'
+            + '匹配封面和歌词会准很多，代价是每首发一次请求，几十首的目录会明显慢一点。'
+            + '关掉就用文件名猜（「歌手 - 歌名」这种命名能猜对），播放时照样能听。' })
         }
         .width('100%')
-        .padding({ left: 16, right: 16 })
+        .padding({ left: 16, right: 16, top: 8, bottom: 8 })
       }
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .borderRadius(R_CARD)
+      .backgroundColor(C_CARD)
+
+      this.sectionTitle('曲库与缓存')
+      this.libraryCard()
+      HintText({ text: '曲库就是「上次扫描的结果」这份缓存：服务器上的文件不归这个应用管，'
+        + '要拿掉什么直接在服务器上删、然后重新扫描。'
+        + '云端音乐不参与同步（与本地音乐一致：同步只传在线歌曲）；'
+        + '歌单与收藏里的云端歌存在「非同步侧表」里，上行时不会发出去。' })
+
+      Column().height(this.embedded ? 0 : this.bottomInset + 20).width('100%')
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(C_BG)
+    .padding({
+      left: this.embedded ? 0 : 16,
+      right: this.embedded ? 0 : 16,
+      top: this.embedded ? 0 : 0,
+      bottom: this.embedded ? 6 : 16,
+    })
   }
 }
 

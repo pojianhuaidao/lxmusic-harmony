@@ -21,6 +21,8 @@ import { MediaCache } from '../core/music/MediaCache';
  */
 @Component
 export struct CacheSettingsView {
+  /** 平铺模式：由「我的」页把这一页的设置直接展开，不要自成滚动页 */
+  @Prop embedded: boolean = false;
   /** 内容让出标题栏那一段（壳层传来的「状态栏 + 标题栏」）：见滚动内容里的顶部占位 */
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
@@ -394,54 +396,71 @@ export struct CacheSettingsView {
   }
 
   build() {
-    Column() {
-      Scroll() {
-        Column({ space: 14 }) {
-          // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
-          // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
-          Column().height(this.topInset + 6).width('100%')
-          this.sectionTitle('播放缓存', sizeText(this.audioBytes))
-          this.audioCard()
-          Text('边听边把整首下到应用沙箱，下次播放直接读本地：不联网、不受源脚本影响。'
-            + '上限设 0 即关闭缓存。开了「缓存时自动下载」则改为下到「下载」文件夹，'
-            + '文件在「我的 - 下载管理」里可见可删（那时这个上限不生效）。'
-            + '开启之前已经缓存在沙箱里的歌不会自动搬过去，想清掉点上面的「清空」。')
-            .fontSize(11.5)
-            .fontColor(C_TEXT_WEAK)
-            .width('100%')
-            .padding({ left: 4, right: 4 })
-            .textAlign(TextAlign.Start)
-          Text('下载永远给播放让路：正在听的那首缓冲不够时缓存会停下来等（网络就那么多，'
-            + '先把声音喂饱），够用了再接着下；断在半路的会留着，下次接着下，不从头重来。'
-            + '上一首还在播时也会提前取下下一首，切歌时直接读本地文件。')
-            .fontSize(11.5)
-            .fontColor(C_TEXT_WEAK)
-            .width('100%')
-            .padding({ left: 4, right: 4 })
-            .textAlign(TextAlign.Start)
-
-          this.sectionTitle('元数据缓存', '')
-          this.metaCard()
-          Text('播放地址、歌词、封面地址都会缓存一份（对应 @music_url / @lyric）：'
-            + '播放过的歌再次播放不必重新解析，歌词不会因为源抽风而忽然没有，'
-            + '封面也不必每次启动都为整张列表重新查一遍。')
-            .fontSize(11.5)
-            .fontColor(C_TEXT_WEAK)
-            .width('100%')
-            .padding({ left: 4, right: 4 })
-            .textAlign(TextAlign.Start)
+    if (this.embedded) {
+      // 平铺模式（「我的」页把每一页设置摊开）：不要自己的滚动与顶部避让，高度随内容长，
+      // 滚动交给外层页面；左右留边也由外层统一给，免得两侧叠成双重内边距。
+      this.body()
+    } else {
+      Column() {
+        Scroll() {
+          this.body()
         }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 8, bottom: this.bottomInset + 16 })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .align(Alignment.Top)
       }
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(C_BG)
+    }
+  }
+
+  /** 页面主体（独立页 / 「我的」页平铺共用）：embedded 时不留顶部与左右留边 */
+  @Builder
+  body() {
+    Column({ space: 14 }) {
+      // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
+      // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
+      Column().height(this.embedded ? 0 : this.topInset + 6).width('100%')
+      this.sectionTitle('播放缓存', sizeText(this.audioBytes))
+      this.audioCard()
+      Text('边听边把整首下到应用沙箱，下次播放直接读本地：不联网、不受源脚本影响。'
+        + '上限设 0 即关闭缓存。开了「缓存时自动下载」则改为下到「下载」文件夹，'
+        + '文件在「我的 - 下载管理」里可见可删（那时这个上限不生效）。'
+        + '开启之前已经缓存在沙箱里的歌不会自动搬过去，想清掉点上面的「清空」。')
+        .fontSize(11.5)
+        .fontColor(C_TEXT_WEAK)
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+        .textAlign(TextAlign.Start)
+      Text('下载永远给播放让路：正在听的那首缓冲不够时缓存会停下来等（网络就那么多，'
+        + '先把声音喂饱），够用了再接着下；断在半路的会留着，下次接着下，不从头重来。'
+        + '上一首还在播时也会提前取下下一首，切歌时直接读本地文件。')
+        .fontSize(11.5)
+        .fontColor(C_TEXT_WEAK)
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+        .textAlign(TextAlign.Start)
+
+      this.sectionTitle('元数据缓存', '')
+      this.metaCard()
+      Text('播放地址、歌词、封面地址都会缓存一份（对应 @music_url / @lyric）：'
+        + '播放过的歌再次播放不必重新解析，歌词不会因为源抽风而忽然没有，'
+        + '封面也不必每次启动都为整张列表重新查一遍。')
+        .fontSize(11.5)
+        .fontColor(C_TEXT_WEAK)
+        .width('100%')
+        .padding({ left: 4, right: 4 })
+        .textAlign(TextAlign.Start)
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(C_BG)
+    .padding({
+      left: this.embedded ? 0 : 16,
+      right: this.embedded ? 0 : 16,
+      top: this.embedded ? 0 : 8,
+      bottom: this.embedded ? 6 : this.bottomInset + 16,
+    })
   }
 }
 

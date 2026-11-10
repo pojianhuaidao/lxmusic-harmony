@@ -3,7 +3,7 @@ import { K_MATERIAL_LEVEL } from '../core/settings/AppearanceSettings';
 import { HDS_BAR_HEIGHT } from '../ui/Hds';
 import { K_BAR_MINI_WIDTH, barSideMarginFor } from '../ui/Layout';
 import { K_SELECT_ACTIVE, SelectionActions } from '../ui/Selection';
-import { C_BG } from '../ui/Theme';
+import { C_BG, C_PLATE_EDGE, C_PLATE_FILL } from '../ui/Theme';
 import { MiniBarView } from './MiniBar';
 
 /** 页内悬浮迷你播放条的离底距离：与壳层那条 HdsTabs 悬浮栏同一个口径 */
@@ -71,6 +71,18 @@ export struct PanePage {
     }
     .width('100%')
     .height('100%')
+    /**
+     * 形状恒为胶囊（用户反馈第 2 条，与歌单详情 / 在线详情同款）
+     *
+     * 子页面拿不到壳层那条 HDS 悬浮胶囊（`barFloatingStyle` 是 API 26 接口，本机调用即 JsCrash），
+     * 栏体又是透明的，所以轮廓改由自绘：半高圆角 + 薄底色(c_plate_fill) + c_plate_edge 描边
+     * + 浮起阴影。底色要淡、要透但**必须看得见**；别换成 thinGlass（模糊会把列表糊成白板），
+     * 也别退回一点底都不画（用户明确说过那样「全透明就看不到了」）。
+     */
+    .borderRadius(HDS_BAR_HEIGHT / 2)
+    .backgroundColor(C_PLATE_FILL)
+    .border({ width: 1, color: C_PLATE_EDGE })
+    .shadow({ radius: 20, color: 'rgba(0, 0, 0, 0.20)', offsetX: 0, offsetY: 8 })
   }
 
   /**

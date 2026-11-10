@@ -23,8 +23,20 @@ $OutDir = Join-Path $Root "output"
 $SignJar = Join-Path $KeyDir "hap-sign-tool.jar"
 
 # ---- 1b. locate app_packing_tool.jar (官方 .app 打包，规避手搓 zip 导致 AGC 996) ----
-$AppPackJar = Get-ChildItem "C:\Program Files\Huawei\DevEco Studio\sdk" -Recurse -Filter "app_packing_tool.jar" -ErrorAction SilentlyContinue |
-    Select-Object -First 1 -ExpandProperty FullName
+# DevEco Studio 安装位置不固定（本机在 D 盘），先按候选根目录定位再兜底全盘常见路径
+$DevEcoRoots = @(
+    "C:\Program Files\Huawei\DevEco Studio",
+    "D:\Program Files\Huawei\DevEco Studio",
+    $(if ($env:DEVECO_HOME) { $env:DEVECO_HOME } else { $null }),
+    "C:\Program Files\Huawei\DevEco Studio"
+) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+$DevEcoRoot = $DevEcoRoots | Where-Object { Test-Path (Join-Path $_ "sdk") } | Select-Object -First 1
+$AppPackJar = $null
+foreach ($r in $DevEcoRoots) {
+    $AppPackJar = Get-ChildItem (Join-Path $r "sdk") -Recurse -Filter "app_packing_tool.jar" -ErrorAction SilentlyContinue |
+        Select-Object -First 1 -ExpandProperty FullName
+    if ($AppPackJar) { break }
+}
 if (-not $AppPackJar) {
     $candidates = @(
         "$env:DEVECO_SDK_HOME\toolchains\lib\app_packing_tool.jar",
@@ -39,14 +51,15 @@ Write-Host "==> app_packing_tool: $AppPackJar"
 if (-not (Test-Path $SignJar)) { Write-Error "Missing sign tool: $SignJar (see key\KEY.txt)" }
 
 # hvigor 官方 wrapper（IDE 自带；自动处理插件加载，规避 node_modules 空壳/顶层 hvigor 冲突）
-$hvigorw = "C:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.bat"
-if (-not (Test-Path $hvigorw)) {
-    $candidates = @(
-        "$env:DEVECO_HOME\tools\hvigor\bin\hvigorw.bat",
-        "$Root\hvigorw.bat"
-    )
-    $hvigorw = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-}
+$hvigorw = $null
+$candidates = @(
+    $(if ($DevEcoRoot) { Join-Path $DevEcoRoot "tools\hvigor\bin\hvigorw.bat" } else { $null }),
+    "C:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.bat",
+    "D:\Program Files\Huawei\DevEco Studio\tools\hvigor\bin\hvigorw.bat",
+    $(if ($env:DEVECO_HOME) { "$env:DEVECO_HOME\tools\hvigor\bin\hvigorw.bat" } else { $null }),
+    "$Root\hvigorw.bat"
+) | Where-Object { $_ }
+$hvigorw = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $hvigorw) { Write-Error "hvigorw.bat not found. Install DevEco Studio first." }
 
 $p12 = Join-Path $KeyDir "music.p12"
@@ -71,7 +84,7 @@ $alias = "lxmusic"
 # versionCode = 1MMDDNN（整数），buildVersion = 1MMDDNN（字符串，与 versionCode 一致）。
 # 本脚本构建前必须自动生成并写回三处字段，禁止手动修改版本号。
 $appJsonPath = Join-Path $Root "AppScope\app.json5"
-$appJson = Get-Content $appJsonPath -Raw
+$appJson = Get-Content $appJsonPath -Raw -Encoding UTF8
 
 $mmdd = (Get-Date).ToString("MMdd")
 
@@ -94,6 +107,17 @@ $verName = "1.$mmdd.$nnStr"
 $verCode = [int]("1" + $mmdd + $nnStr)
 $buildVer = ("1" + $mmdd + $nnStr)
 
+# 推断值可能正好等于 app.json5 里已写的那一版（上次构建的产物被清理后，output\ 推断会落后一位），
+# 那样三处替换都不产生差异，会误判成「改写失败」。这种情况往前挪一位，保证版本号只增不退。
+if ($appJson -match ('"versionName"\s*:\s*"' + [regex]::Escape($verName) + '"')) {
+    $nn = $nn + 1
+    if ($nn -gt 99) { Write-Error "当日构建序号超过 99（NN=$nn），请检查 output\ 产物或等待次日再构建。" }
+    $nnStr = $nn.ToString("D2")
+    $verName = "1.$mmdd.$nnStr"
+    $verCode = [int]("1" + $mmdd + $nnStr)
+    $buildVer = ("1" + $mmdd + $nnStr)
+}
+
 # 写回 AppScope/app.json5 三处版本字段（仅改字段值，保持文件其余内容与编码不变）
 # 注意：replacement 中捕获组必须用 ${1} 形式，$1 后接数字会被 .NET 解析为组号歧义
 $newJson = $appJson -replace '("versionCode"\s*:\s*)\d+', ('${1}' + $verCode)
@@ -107,7 +131,9 @@ Write-Host "==> auto version: versionName=$verName / versionCode=$verCode / buil
 # ---- 3. 修正 DEVECO_SDK_HOME（hvigor 依赖它定位 SDK；若指向失效路径会报 00303217） ----
 $sdkCandidates = @(
     $env:DEVECO_SDK_HOME,
-    "C:\Program Files\Huawei\DevEco Studio\sdk"
+    $(if ($DevEcoRoot) { Join-Path $DevEcoRoot "sdk" } else { $null }),
+    "C:\Program Files\Huawei\DevEco Studio\sdk",
+    "D:\Program Files\Huawei\DevEco Studio\sdk"
 ) | Where-Object { $_ -and (Test-Path $_) }
 $sdkHome = $sdkCandidates | Select-Object -First 1
 if (-not $sdkHome) { Write-Error "DevEco SDK not found (DEVECO_SDK_HOME invalid)." }

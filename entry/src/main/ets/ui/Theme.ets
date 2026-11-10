@@ -61,6 +61,19 @@ export const C_GLASS_FILL: Resource = $r('app.color.c_glass_fill');
 export const C_GLASS_TINT: Resource = $r('app.color.c_glass_tint');
 /** 提示条那种要保证文字可读的更实的玻璃底色 */
 export const C_GLASS_SOLID: Resource = $r('app.color.c_glass_solid');
+/**
+ * 底部悬浮底板（胶囊）的填充色：**看得见本体、又能透出背后内容**的那一档
+ *
+ * 来历：先是 82% 白（C_GLASS_SOLID）被嫌「白底太重」，改成一点底都不画（clearPlate）
+ * 又被嫌「全透明看不见」。这里取中间值 —— 浅色 72% 白、深色 24% 白，
+ * 再配合 c_plate_edge 描边与阴影，胶囊轮廓清楚，列表也不至于被糊死。
+ */
+export const C_PLATE_FILL: Resource = $r('app.color.c_plate_fill');
+/**
+ * 悬浮底板描边色：浅色模式用极淡的黑（白边在浅灰底上会变成一条扎眼的「白边」），
+ * 深色模式用淡白。别再写死 #66FFFFFF。
+ */
+export const C_PLATE_EDGE: Resource = $r('app.color.c_plate_edge');
 /** 底部页签栏底下的渐隐蒙层色（内容从这里淡出，必须跟着底色走） */
 export const C_MASK_BOTTOM: Resource = $r('app.color.c_mask_bottom');
 

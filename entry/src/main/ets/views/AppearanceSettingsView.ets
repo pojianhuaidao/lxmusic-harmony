@@ -23,6 +23,8 @@ import { AppearanceSettings, COLOR_MODE_LABELS, COVER_RADIUS_DEFAULT, COVER_RADI
  */
 @Component
 export struct AppearanceSettingsView {
+  /** 平铺模式：由「我的」页把这一页的设置直接展开，不要自成滚动页 */
+  @Prop embedded: boolean = false;
   /** 内容让出标题栏那一段（壳层传来的「状态栏 + 标题栏」）：见滚动内容里的顶部占位 */
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
@@ -75,91 +77,108 @@ export struct AppearanceSettingsView {
   }
 
   build() {
-    Column() {
-      Scroll() {
-        Column({ space: 14 }) {
-          // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
-          // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
-          Column().height(this.topInset + 6).width('100%')
-          // ------------------------------------------------ 深浅模式
-          Column({ space: 8 }) {
-            OptionSetting({
-              label: '深浅模式',
-              options: COLOR_MODE_LABELS,
-              activeIndex: this.colorMode,
-              onPick: (index: number) => {
-                AppearanceSettings.getInstance().setColorMode(index, this.getUIContext()
-                  .getHostContext() as common.Context);
-              },
-            })
-            HintText({ text: this.colorModeHint() })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-
-          // ------------------------------------------------ 玻璃材质
-          Column({ space: 8 }) {
-            OptionSetting({
-              label: '玻璃材质档位',
-              options: MATERIAL_LEVEL_LABELS,
-              activeIndex: this.materialLevel,
-              onPick: (index: number) => {
-                AppearanceSettings.getInstance().setMaterialLevel(index);
-              },
-            })
-            HintText({ text: this.materialHint() })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-
-          // ------------------------------------------------ 光效
-          Column({ space: 8 }) {
-            ToggleSetting({
-              label: '首页流光',
-              value: this.flowLight,
-              onPick: (next: boolean) => {
-                AppearanceSettings.getInstance().setFlowLight(next);
-              },
-            })
-            HintText({ text: this.flowLightHint() })
-
-            // 封面圆角：拖动实时变（播放页封面跟着走），松手才落盘
-            SliderSetting({
-              label: '播放页封面圆角',
-              value: this.coverRadius,
-              min: COVER_RADIUS_MIN,
-              max: COVER_RADIUS_MAX,
-              onPick: (value: number, done: boolean) => {
-                AppearanceSettings.getInstance().setCoverRadius(value, done);
-              },
-            })
-            HintText({
-              text: '0 是直角，40 接近圆形。播放页的大封面与小歌词下面的小封面共用这一个值，'
-                + '列表里的封面不受影响（那是列表自己的排版）。',
-            })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-
-          // ------------------------------------------------ 能力诊断
-          HintText({ text: this.capabilityText() })
+    if (this.embedded) {
+      // 平铺模式（「我的」页把每一页设置摊开）：不要自己的滚动与顶部避让，高度随内容长，
+      // 滚动交给外层页面；左右留边也由外层统一给，免得两侧叠成双重内边距。
+      this.body()
+    } else {
+      Column() {
+        Scroll() {
+          this.body()
         }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 8, bottom: this.bottomInset + 16 })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .align(Alignment.Top)
       }
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(C_BG)
+    }
+  }
+
+  /** 页面主体（独立页 / 「我的」页平铺共用）：embedded 时不留顶部与左右留边 */
+  @Builder
+  body() {
+    Column({ space: 14 }) {
+      // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
+      // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
+      Column().height(this.embedded ? 0 : this.topInset + 6).width('100%')
+      // ------------------------------------------------ 深浅模式
+      Column({ space: 8 }) {
+        OptionSetting({
+          label: '深浅模式',
+          options: COLOR_MODE_LABELS,
+          activeIndex: this.colorMode,
+          onPick: (index: number) => {
+            AppearanceSettings.getInstance().setColorMode(index, this.getUIContext()
+              .getHostContext() as common.Context);
+          },
+        })
+        HintText({ text: this.colorModeHint() })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .borderRadius(R_CARD)
+      .backgroundColor(C_CARD)
+
+      // ------------------------------------------------ 玻璃材质
+      Column({ space: 8 }) {
+        OptionSetting({
+          label: '玻璃材质档位',
+          options: MATERIAL_LEVEL_LABELS,
+          activeIndex: this.materialLevel,
+          onPick: (index: number) => {
+            AppearanceSettings.getInstance().setMaterialLevel(index);
+          },
+        })
+        HintText({ text: this.materialHint() })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .borderRadius(R_CARD)
+      .backgroundColor(C_CARD)
+
+      // ------------------------------------------------ 光效
+      Column({ space: 8 }) {
+        ToggleSetting({
+          label: '首页流光',
+          value: this.flowLight,
+          onPick: (next: boolean) => {
+            AppearanceSettings.getInstance().setFlowLight(next);
+          },
+        })
+        HintText({ text: this.flowLightHint() })
+
+        // 封面圆角：拖动实时变（播放页封面跟着走），松手才落盘
+        SliderSetting({
+          label: '播放页封面圆角',
+          value: this.coverRadius,
+          min: COVER_RADIUS_MIN,
+          max: COVER_RADIUS_MAX,
+          onPick: (value: number, done: boolean) => {
+            AppearanceSettings.getInstance().setCoverRadius(value, done);
+          },
+        })
+        HintText({
+          text: '0 是直角，40 接近圆形。播放页的大封面与小歌词下面的小封面共用这一个值，'
+            + '列表里的封面不受影响（那是列表自己的排版）。',
+        })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .borderRadius(R_CARD)
+      .backgroundColor(C_CARD)
+
+      // ------------------------------------------------ 能力诊断
+      HintText({ text: this.capabilityText() })
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(C_BG)
+    .padding({
+      left: this.embedded ? 0 : 16,
+      right: this.embedded ? 0 : 16,
+      top: this.embedded ? 0 : 8,
+      bottom: this.embedded ? 6 : this.bottomInset + 16,
+    })
   }
 }

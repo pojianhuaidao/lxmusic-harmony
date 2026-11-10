@@ -19,6 +19,8 @@ import { DownloadSettings, K_DOWNLOAD_DIR_URI, K_DOWNLOAD_MARK_QUALITY, K_DOWNLO
  */
 @Component
 export struct DownloadSettingsView {
+  /** 平铺模式：由「我的」页把这一页的设置直接展开，不要自成滚动页 */
+  @Prop embedded: boolean = false;
   /** 内容让出标题栏那一段（壳层传来的「状态栏 + 标题栏」）：见滚动内容里的顶部占位 */
   @Prop topInset: number = 0;
   @Prop bottomInset: number = 0;
@@ -38,55 +40,72 @@ export struct DownloadSettingsView {
   }
 
   build() {
-    Column() {
-      Scroll() {
-        Column({ space: 14 }) {
-          // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
-          // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
-          Column().height(this.topInset + 6).width('100%')
-          Column({ space: 8 }) {
-            OptionSetting({
-              label: '文件名称格式',
-              options: NAME_FORMAT_LABELS,
-              activeIndex: this.formatIndex(),
-              onPick: (index: number) => {
-                DownloadSettings.getInstance().setNameFormat(NAME_FORMATS[index]);
-              },
-            })
-
-            ToggleSetting({
-              label: '下载文件标注音质',
-              value: this.markQuality,
-              onPick: (next: boolean) => {
-                DownloadSettings.getInstance().setMarkQuality(next);
-              },
-            })
-
-            // 下载目录：只读展示（不可改、不给跳转入口），与上面两项同一个「标题 + 当前值」样式
-            SettingLabel({ label: '下载目录', value: this.folderLabel() })
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, top: 8, bottom: 8 })
-          .borderRadius(R_CARD)
-          .backgroundColor(C_CARD)
-
-          HintText({ text: this.hintText() })
-          HintText({
-            text: '文件名示例：「' + this.sampleName() + '」。'
-              + '同时最多下 2 首，其余排队。',
-          })
+    if (this.embedded) {
+      // 平铺模式（「我的」页把每一页设置摊开）：不要自己的滚动与顶部避让，高度随内容长，
+      // 滚动交给外层页面；左右留边也由外层统一给，免得两侧叠成双重内边距。
+      this.body()
+    } else {
+      Column() {
+        Scroll() {
+          this.body()
         }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 8, bottom: this.bottomInset + 16 })
+        .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring)
+        .layoutWeight(1)
+        .align(Alignment.Top)
       }
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
-      .layoutWeight(1)
-      .align(Alignment.Top)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(C_BG)
+    }
+  }
+
+  /** 页面主体（独立页 / 「我的」页平铺共用）：embedded 时不留顶部与左右留边 */
+  @Builder
+  body() {
+    Column({ space: 14 }) {
+      // 顶部占位：第一行落在透明标题栏下方，但它跟着内容一起滚走 —— 用容器内边距会把
+      // 这一段内容裁在标题栏下边缘，看起来就"像被顶栏挡住"（首页就是这么做的）
+      Column().height(this.embedded ? 0 : this.topInset + 6).width('100%')
+      Column({ space: 8 }) {
+        OptionSetting({
+          label: '文件名称格式',
+          options: NAME_FORMAT_LABELS,
+          activeIndex: this.formatIndex(),
+          onPick: (index: number) => {
+            DownloadSettings.getInstance().setNameFormat(NAME_FORMATS[index]);
+          },
+        })
+
+        ToggleSetting({
+          label: '下载文件标注音质',
+          value: this.markQuality,
+          onPick: (next: boolean) => {
+            DownloadSettings.getInstance().setMarkQuality(next);
+          },
+        })
+
+        // 下载目录：只读展示（不可改、不给跳转入口），与上面两项同一个「标题 + 当前值」样式
+        SettingLabel({ label: '下载目录', value: this.folderLabel() })
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .borderRadius(R_CARD)
+      .backgroundColor(C_CARD)
+
+      HintText({ text: this.hintText() })
+      HintText({
+        text: '文件名示例：「' + this.sampleName() + '」。'
+          + '同时最多下 2 首，其余排队。',
+      })
     }
     .width('100%')
-    .height('100%')
-    .backgroundColor(C_BG)
+    .padding({
+      left: this.embedded ? 0 : 16,
+      right: this.embedded ? 0 : 16,
+      top: this.embedded ? 0 : 8,
+      bottom: this.embedded ? 6 : this.bottomInset + 16,
+    })
   }
 
   private hintText(): string {

@@ -19,8 +19,8 @@ import { fileIo as fs } from '@kit.CoreFileKit';
  * fileIo 模块没有 fs.getDownloadDirectory()（API 12 环境不存在该函数），源码级只能
  * 用下方已知路径探测，取不到时回退私有沙箱。
  *
- * 华为账号备份（core/account/HuaweiAccount）把备份文件写在这个根目录下的
- * huawei_backup 子目录，作为「华为远端数据」的端侧镜像，与页面层同一套数据链路。
+ * 备份只剩 WebDAV 一条（core/webdav/WebDavBackup）；原先华为账号那条链路
+ * （core/account/HuaweiAccount + 端侧 huawei_backup 镜像目录）已整体移除。
  *
  * 迁移说明：应用数据目录由 LxMusicData 改为 MusicData（品牌切割）。旧版本数据位于
  * 公共 Download/LxMusicData 下，升级后如要找回旧备份 / 旧数据，可手动将该目录内容

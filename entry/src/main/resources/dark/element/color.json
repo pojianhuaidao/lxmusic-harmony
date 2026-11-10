@@ -183,6 +183,14 @@
     {
       "name": "p_wy_tint",
       "value": "#2EE86A6A"
+    },
+    {
+      "name": "c_plate_fill",
+      "value": "#4DFFFFFF"
+    },
+    {
+      "name": "c_plate_edge",
+      "value": "#33FFFFFF"
     }
   ]
 }

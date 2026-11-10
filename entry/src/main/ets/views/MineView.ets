@@ -4,11 +4,19 @@ import { K_SYNC_DATA_VERSION, SyncManager } from '../core/sync/SyncManager';
 import { K_LOCAL_VERSION, LocalMusic } from '../core/local/LocalMusic';
 import { K_DOWNLOAD_VERSION, DownloadManager } from '../core/download/DownloadManager';
 import { K_WEBDAV_VERSION, WebDavLibrary } from '../core/webdav/WebDavLibrary';
-import { C_BG, C_CARD, C_CHEVRON, C_DIVIDER, C_ICON_CIRCLE, C_PRESSED, C_RED, C_RED_TINT,
-  C_TEXT, C_TEXT_SUB, C_TEXT_WEAK, F_ITEM, F_SUB, R_CARD } from '../ui/Theme';
-import { I_BRUSH, I_CACHE, I_CHEVRON_RIGHT, I_CLOCK, I_CLOUD, I_DISC, I_DOWNLOAD, I_FOLDER,
-  I_HEART_FILLED, I_INFO, I_PERSON, I_REFRESH, I_VOLUME, IconGlyph } from '../ui/Icons';
-import { TopFade } from '../ui/Widgets';
+import { C_BG, C_CARD, C_PRESSED, C_RED, C_RED_TINT,
+  C_TEXT, C_TEXT_WEAK, F_SUB, R_CARD } from '../ui/Theme';
+import { I_CLOCK, I_CLOUD, I_DOWNLOAD, I_FOLDER,
+  I_HEART_FILLED, IconGlyph } from '../ui/Icons';
+import { SectionTitle, TopFade } from '../ui/Widgets';
+import { SourceSettingsView } from './SourceSettingsView';
+import { PlaySettingsView } from './PlaySettingsView';
+import { DownloadSettingsView } from './DownloadSettingsView';
+import { CacheSettingsView } from './CacheSettingsView';
+import { AppearanceSettingsView } from './AppearanceSettingsView';
+import { BackupOptionsView } from './BackupOptionsView';
+import { WebDavSettingsView } from './WebDavSettingsView';
+import { AboutView } from './AboutView';
 
 /** 底部栏收起/展开触发阈值（vp）：同方向累计滚动超过它才切换状态 */
 const FOLD_THRESHOLD: number = 24;
@@ -33,28 +41,11 @@ const ENTRIES: MineEntry[] = [
   { icon: I_CLOUD, label: '云端音乐', action: 'cloud' },
 ];
 
-/** 设置卡：整行设置项（音源 / 同步 / 显示 / 关于） */
-interface MineLink {
-  icon: Resource;
-  title: string;
-  action: string;
-}
-
-/** 设置卡第 3 段：显示设置（原「外观」改名）/ 关于 */
-const GROUP_SETTINGS_BOTTOM: MineLink[] = [
-  { icon: I_BRUSH, title: '显示设置', action: 'appearance' },
-  { icon: I_INFO, title: '关于', action: 'about' },
-];
-
-/** 设置卡网格（音源 / 同步 / 播放 / 缓存 / 下载 / 云音乐），图标在上、文字在下、一行两个（6 宫格 3 行） */
-const GROUP_SETTINGS_GRID: MineLink[] = [
-  { icon: I_DISC, title: '音源设置', action: 'source' },
-  { icon: I_REFRESH, title: '同步设置', action: 'sync' },
-  { icon: I_VOLUME, title: '播放设置', action: 'play' },
-  { icon: I_CACHE, title: '缓存设置', action: 'cache' },
-  { icon: I_DOWNLOAD, title: '下载设置', action: 'download' },
-  { icon: I_PERSON, title: '云音乐设置', action: 'webdav' },
-];
+/**
+ * 设置区：原来那张「六宫格 + 显示/关于两行」的入口卡已经拆掉 ——
+ * 现在把每一页设置按 embedded 模式直接摊在「我的」页里，从上往下一路读到底
+ * （音源 / 播放 / 下载 / 缓存 / 显示 / 备份与恢复 / 云音乐 / 关于），不再点进子页面。
+ */
 
 /**
  * 我的页
@@ -64,7 +55,8 @@ const GROUP_SETTINGS_GRID: MineLink[] = [
  *   - 第 1 段：音源设置 / 同步设置 / 播放设置 / 缓存设置 / 下载设置 / 云音乐设置（六宫格，图标在上、文字在下、一行两个）；
  *   - 第 2 段：显示设置（原「外观」改名）/ 关于。
  *
- * 右上角的华为账号登录入口由壳层（Index.ets）负责（标题栏人形钮），本页不再重复。
+ * 华为账号 / 华为云空间那条备份链路端侧跑不通，已整体移除（含壳层标题栏的人形钮），
+ * 备份只剩 WebDAV 一条，见 views/BackupOptionsView.ets。
  * 歌单相关内容（自建歌单 / 收藏歌单 / 导入）已整体搬到「歌单」页（views/SongListView.ets）。
  */
 @Component
@@ -209,127 +201,73 @@ export struct MineView {
     .backgroundColor(C_CARD)
   }
 
-  /** 设置卡里的一行：圆底图标 + 标题 + 右箭头（显示 / 关于 用） */
+  /** 一个设置分区的标题（音源设置 / 播放设置 …「关于」） */
   @Builder
-  linkRow(row: MineLink, showDivider: boolean) {
-    Column() {
-      if (showDivider) {
-        Divider()
-          .strokeWidth(0.6)
-          .color(C_DIVIDER)
-          .margin({ left: 61 })
-      }
-
-      Row({ space: 13 }) {
-        Stack({ alignContent: Alignment.Center }) {
-          Column()
-            .width(34)
-            .height(34)
-            .borderRadius(17)
-            .backgroundColor(C_ICON_CIRCLE)
-          IconGlyph({ symbol: row.icon, iconSize: 20, color: C_TEXT })
-        }
-        .width(34)
-        .height(34)
-
-        Text(row.title)
-          .fontSize(F_ITEM)
-          .fontColor(C_TEXT)
-          .layoutWeight(1)
-          .textAlign(TextAlign.Start)
-
-        IconGlyph({ symbol: I_CHEVRON_RIGHT, iconSize: 18, color: C_CHEVRON })
-          .accessibilityLevel('no')
-      }
-      .width('100%')
-      .height(63)
-      .padding({ left: 14, right: 14 })
-      .stateStyles({
-        normal: { .backgroundColor(Color.Transparent) },
-        pressed: { .backgroundColor(C_PRESSED) },
-      })
-      .onClick(() => {
-        this.onNavigate(row.action);
-      })
-      .accessibilityText(row.title)
-      .accessibilityLevel('yes')
+  sectionHead(text: string) {
+    Row() {
+      SectionTitle({ text: text })
+      Blank()
     }
     .width('100%')
-  }
-
-  /** 设置卡里的网格项：图标在上、文字在下（音源 / 同步 / 播放 / 缓存 / 下载 / 云音乐 用，一行两个） */
-  @Builder
-  gridItem(index: number) {
-    Column({ space: 6 }) {
-      IconGlyph({ symbol: GROUP_SETTINGS_GRID[index].icon, iconSize: 24, color: C_TEXT })
-      Text(GROUP_SETTINGS_GRID[index].title)
-        .fontSize(F_SUB + 0.5)
-        .fontColor(C_TEXT)
-        .maxLines(1)
-    }
-    .layoutWeight(1)
-    .height(86)
-    .justifyContent(FlexAlign.Center)
-    .stateStyles({
-      normal: { .backgroundColor(Color.Transparent) },
-      pressed: { .backgroundColor(C_PRESSED) },
-    })
-    .onClick(() => {
-      this.onNavigate(GROUP_SETTINGS_GRID[index].action);
-    })
-    .accessibilityText(GROUP_SETTINGS_GRID[index].title)
-    .accessibilityLevel('yes')
+    .padding({ left: 4, right: 4, top: 6, bottom: 2 })
   }
 
   /**
-   * 设置卡（原设置页的入口整体搬过来，一张卡三段）
+   * 设置区（全部平铺，不点进子页面）
    *
-   *   第 1 段：音源设置 / 同步设置 / 播放设置 / 缓存设置 / 下载设置 / 云音乐设置
-   *          （六宫格，图标在上、文字在下、一行两个）；
-   *   第 2 段：显示设置（原「外观」）/ 关于。
-   *
-   * 原来的「搜索设置」已整体砍掉（连 Search 组件一起删），本卡不再有搜索框。
+   * 每一页设置都用 embedded 模式挂在这里：内层不要自己的 Scroll、不要顶部避让、
+   * 左右留边交给本页统一给（否则会叠成双重内边距）。外层这一个 Scroll 管全部设置，
+   * 列表跟着内容一路展开到底。
    */
   @Builder
-  linksCard() {
-    Column() {
-      // ------------------------------------------------ 第 1 段：设置六宫格
-      Divider()
-        .strokeWidth(0.6)
-        .color(C_DIVIDER)
-        .margin({ left: 14, right: 14 })
-
-      Row() {
-        this.gridItem(0)
-        this.gridItem(1)
-      }
-      .width('100%')
-
-      Row() {
-        this.gridItem(2)
-        this.gridItem(3)
-      }
-      .width('100%')
-
-      Row() {
-        this.gridItem(4)
-        this.gridItem(5)
-      }
-      .width('100%')
-
-      Divider()
-        .strokeWidth(0.6)
-        .color(C_DIVIDER)
-        .margin({ left: 14, right: 14 })
-
-      // ------------------------------------------------ 第 2 段：显示 / 关于
-      this.linkRow(GROUP_SETTINGS_BOTTOM[0], false)
-      this.linkRow(GROUP_SETTINGS_BOTTOM[1], true)
+  settingsFlat() {
+    Column({ space: 6 }) {
+      this.sectionHead('音源设置')
+      SourceSettingsView({ embedded: true, topInset: 0, bottomInset: 0 })
     }
     .width('100%')
-    .borderRadius(R_CARD)
-    .backgroundColor(C_CARD)
-    .clip(true)
+
+    Column({ space: 6 }) {
+      this.sectionHead('播放设置')
+      PlaySettingsView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
+
+    Column({ space: 6 }) {
+      this.sectionHead('下载设置')
+      DownloadSettingsView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
+
+    Column({ space: 6 }) {
+      this.sectionHead('缓存设置')
+      CacheSettingsView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
+
+    Column({ space: 6 }) {
+      this.sectionHead('显示设置')
+      AppearanceSettingsView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
+
+    Column({ space: 6 }) {
+      this.sectionHead('备份与恢复')
+      BackupOptionsView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
+
+    Column({ space: 6 }) {
+      this.sectionHead('云音乐设置')
+      WebDavSettingsView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
+
+    Column({ space: 6 }) {
+      this.sectionHead('关于')
+      AboutView({ embedded: true, topInset: 0, bottomInset: 0 })
+    }
+    .width('100%')
   }
 
   build() {
@@ -342,7 +280,7 @@ export struct MineView {
             Column().height(this.topInset + 6).width('100%')
 
             this.quickCard()
-            this.linksCard()
+            this.settingsFlat()
           }
           .width('100%')
           .padding({ left: 16, right: 16, bottom: this.bottomInset + 16 })

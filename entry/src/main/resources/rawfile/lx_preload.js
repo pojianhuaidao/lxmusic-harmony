@@ -120,7 +120,9 @@
   const sendCalls = []
   let requestCount = 0
   global.__lx_debug_state__ = () => JSON.stringify({
-    hasHandler: events.request !== null,
+    hasHandler: events.request !== null || events.requests.length > 0 || typeof events.router === 'function',
+    handlerCount: events.requests.length,
+    hasRouter: typeof events.router === 'function',
     inited: isInitedApi,
     sendCalls: sendCalls,
     requestCount: requestCount,
@@ -143,7 +145,12 @@
     updateAlert: 'updateAlert',
   }
   const eventNames = Object.values(EVENT_NAMES)
-  const events = { request: null }
+  // 多源共存改造：官方 preload 只有一个 request 槽位，后注册的源会覆盖先注册的，
+  // 聚合音源包（一个脚本里塞 N 个子源）在这种结构下最终只剩 1 个源能用。
+  // 这里改成「请求处理器列表 + 可选路由」：
+  //   requests: 走 lx.on('request', fn) 注册的所有处理器，按注册顺序追加，不互相覆盖
+  //   router:   走 lx.registerRouter(fn) 注册的聚合调度器，优先于 requests 生效
+  const events = { request: null, requests: [], router: null }
 
   const allSources = ['kw', 'kg', 'tx', 'wy', 'mg', 'local']
   const supportQualitys = {
@@ -204,14 +211,22 @@
     else targetRequest.callback(new Error(error), null)
   }
 
+  // 取当前生效的 request 处理器：有聚合路由时走路由，否则用最后注册的 handler
+  const pickRequestHandler = () => {
+    if (typeof events.router === 'function') return events.router
+    if (events.requests.length > 0) return events.requests[events.requests.length - 1]
+    return events.request
+  }
+
   const handleRequest = ({ requestKey, data }) => {
-    if (!events.request) {
+    const handler = pickRequestHandler()
+    if (!handler) {
       nativeCall(NATIVE_EVENTS_NAMES.response, { requestKey, status: false, errorMessage: 'Request event is not defined' })
       return
     }
     try {
       // 源脚本注册的 request 处理器返回 Promise<string|object>
-      Promise.resolve(events.request.call(global.lx, {
+      Promise.resolve(handler.call(global.lx, {
         source: data.source,
         action: data.action,
         info: data.info,
@@ -283,6 +298,10 @@
   })
 
   // ------------------------------------------------------------------ init
+  // 多源共存改造：聚合音源包里的子源会各自 send('inited') 声明自己支持的平台，
+  // 官方语义是「一个脚本一个源、只声明一次」，这里改为累加合并 —— 每次上报都带上
+  // 此前所有子源声明过的平台，最后一份声明即全量结果。
+  const initedSources = {}
   const handleInit = (info) => {
     if (!info) {
       nativeCall(NATIVE_EVENTS_NAMES.init, { info: null, status: false, errorMessage: 'Missing required parameter init info' })
@@ -295,17 +314,40 @@
         if (!userSource || userSource.type !== 'music') continue
         const qualitys = supportQualitys[source]
         const actions = supportActions[source]
-        sourceInfo.sources[source] = {
+        const userActions = Array.isArray(userSource.actions) ? userSource.actions : []
+        const userQualitys = Array.isArray(userSource.qualitys) ? userSource.qualitys : []
+        initedSources[source] = {
           type: 'music',
-          actions: actions.filter(a => userSource.actions.includes(a)),
-          qualitys: qualitys.filter(q => userSource.qualitys.includes(q)),
+          actions: actions.filter(a => userActions.includes(a)),
+          qualitys: qualitys.filter(q => userQualitys.includes(q)),
+        }
+      }
+      // 白名单之外的平台（bilibili / 自定义源等）原样透传，避免聚合包里的非四平台源被吞掉
+      const extraSources = info.sources || {}
+      for (const key of Object.keys(extraSources)) {
+        if (allSources.includes(key)) continue
+        const us = extraSources[key]
+        if (!us || us.type !== 'music') continue
+        initedSources[key] = {
+          type: 'music',
+          actions: Array.isArray(us.actions) ? us.actions.slice() : [],
+          qualitys: Array.isArray(us.qualitys) ? us.qualitys.slice() : [],
         }
       }
     } catch (error) {
       nativeCall(NATIVE_EVENTS_NAMES.init, { info: null, status: false, errorMessage: error.message })
       return
     }
-    nativeCall(NATIVE_EVENTS_NAMES.init, { info: sourceInfo, status: true })
+    // 传副本，避免宿主侧直接持有内部可变对象
+    const snapshot = {}
+    for (const key of Object.keys(initedSources)) {
+      snapshot[key] = {
+        type: 'music',
+        actions: initedSources[key].actions.slice(),
+        qualitys: initedSources[key].qualitys.slice(),
+      }
+    }
+    nativeCall(NATIVE_EVENTS_NAMES.init, { info: { sources: snapshot }, status: true })
   }
 
   const handleShowUpdateAlert = (data, resolve, reject) => {
@@ -435,8 +477,10 @@
         if (!eventNames.includes(eventName)) return reject(new Error('The event is not supported: ' + eventName))
         switch (eventName) {
           case EVENT_NAMES.inited:
-            if (isInitedApi) return reject(new Error('Script is inited'))
-            isInitedApi = true
+            // 多源共存改造：原逻辑第二次 send('inited') 直接 reject('Script is inited')，
+            // 聚合包里第 2 个及之后的子源会被整包报错打断。这里放开重复调用，
+            // 每次把新声明的平台累加进 initedSources 后整体上报。
+            if (!isInitedApi) isInitedApi = true
             handleInit(data)
             resolve()
             break
@@ -454,12 +498,32 @@
       if (!eventNames.includes(eventName)) return Promise.reject(new Error('The event is not supported: ' + eventName))
       switch (eventName) {
         case EVENT_NAMES.request:
+          // 多源共存改造：追加而非覆盖，后注册的源不再顶掉先注册的源
+          if (typeof handler !== 'function') return Promise.reject(new Error('Request handler must be a function'))
+          events.requests.push(handler)
           events.request = handler
           break
         default:
           return Promise.reject(new Error('The event is not supported: ' + eventName))
       }
       return Promise.resolve()
+    },
+    // 聚合音源包专用：注册一个总调度器，宿主收到取链请求时优先交给它，
+    // 由脚本自己在多个源的 handler 之间做竞速/降级；没注册时行为与官方一致。
+    registerRouter (router) {
+      if (typeof router !== 'function') return Promise.reject(new Error('Router must be a function'))
+      events.router = router
+      return Promise.resolve()
+    },
+    // 聚合音源包专用：取当前所有已注册的 request handler（供调度器内部挑选）
+    getHandlers () {
+      return events.requests.slice()
+    },
+    // 聚合音源包专用：清空所有 handler 与路由（热重载/换源时用）
+    clearHandlers () {
+      events.requests.length = 0
+      events.request = null
+      events.router = null
     },
     utils,
     currentScriptInfo: {
@@ -477,12 +541,16 @@
   global.setTimeout = _setTimeout
   global.clearTimeout = _clearTimeout
 
+  // 多源共存改造：官方 preload 在这里对 global.lx 做深度 freeze，
+  // 结果是源脚本无法包装/劫持 lx.on、lx.send（聚合包做调度打点必需），
+  // 本工程取消冻结，改用「只读约定」——源正常写 lx 会污染其它源，故仅放开 lx 顶层，
+  // utils 之类的公共对象仍然冻结，防止某个坏源把加密工具改坏。
   const freezeObject = (obj) => {
     if (typeof obj !== 'object' || obj === null) return
     try { Object.freeze(obj) } catch (e) { return }
     for (const subObj of Object.values(obj)) freezeObject(subObj)
   }
-  try { freezeObject(global.lx) } catch (e) { /* ignore */ }
+  try { freezeObject(global.lx.utils) } catch (e) { /* ignore */ }
 
   global.__lx_destroy__ = () => {
     requestQueue.clear()
@@ -490,6 +558,8 @@
     for (const timer of callbackTimers.values()) hostClearTimeout(timer)
     callbackTimers.clear()
     events.request = null
+    events.requests.length = 0
+    events.router = null
   }
 
   console.log('Preload finished.')
